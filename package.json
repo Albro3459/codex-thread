@@ -1,0 +1,33 @@
+{
+  "name": "@albro3459/codex-thread",
+  "version": "0.0.1",
+  "description": "...",
+  "author": "Alexander Brodsky",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=22.16.0"
+  },
+  "bin": {
+    "codex-thread": "scripts/codex-thread.js"
+  },
+  "exports": {
+    ".": "./src/index.js"
+  },
+  "files": [
+    "scripts/",
+    "src/",
+    "schemas/",
+    "skills/",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE",
+    "NOTICE.txt"
+  ],
+  "scripts": {
+    "test": "node --test",
+    "check": "node scripts/check-syntax.js",
+    "version:update": "npm version patch --no-git-tag-version",
+    "deploy": "npm publish --access=public"
+  }
+}

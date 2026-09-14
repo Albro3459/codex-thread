@@ -1,0 +1,4 @@
+interface:
+  display_name: "Codex Thread Skill"
+  short_description: "..."
+  default_prompt: "..."
