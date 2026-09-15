@@ -6,7 +6,13 @@ import test from "node:test"
 import { fileURLToPath } from "node:url"
 
 import packageMetadata from "../package.json" with { type: "json" }
-import { VERSION } from "../src/index.js"
+import {
+  PARTICIPANTS_SCHEMA_VERSION,
+  TAIL_SCHEMA_VERSION,
+  VERSION,
+  discoverParticipants,
+  tailThread,
+} from "../src/index.js"
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const requiredPackageFiles = [
@@ -26,6 +32,8 @@ const expectedSchemas = {
   "schemas/list.v1.json": "codex-thread.list.v1",
   "schemas/doctor.v1.json": "codex-thread.doctor.v1",
   "schemas/find.v1.json": "codex-thread.find.v1",
+  "schemas/tail-record.v1.json": "codex-thread.tail-record.v1",
+  "schemas/participants.v1.json": "codex-thread.participants.v1",
 }
 const requiredReleaseFiles = [
   ...Object.keys(expectedSchemas),
@@ -52,6 +60,10 @@ test("schemas, public import, and executable expose the package version", () => 
   }
 
   assert.equal(VERSION, packageMetadata.version)
+  assert.equal(TAIL_SCHEMA_VERSION, "codex-thread.tail-record.v1")
+  assert.equal(PARTICIPANTS_SCHEMA_VERSION, "codex-thread.participants.v1")
+  assert.equal(typeof tailThread, "function")
+  assert.equal(typeof discoverParticipants, "function")
   const result = spawnSync(process.execPath, [
     path.join(projectRoot, "scripts", "codex-thread.js"),
     "--version",

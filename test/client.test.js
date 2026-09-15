@@ -146,3 +146,94 @@ test("getThread maps missing-thread and paginated-history protocol errors", asyn
       && error.details.threadId === "thread-1",
   )
 })
+
+test("getParticipants reads root turns and enriches omitted children without child turns", async () => {
+  const calls = []
+  const listCalls = []
+  const root = rawThread({
+    turns: [{
+      id: "turn-1",
+      status: "completed",
+      items: [{
+        id: "activity-1",
+        type: "collabAgentToolCall",
+        tool: "spawnAgent",
+        senderThreadId: "thread-1",
+        receiverThreadIds: ["child-1"],
+        status: "completed",
+      }],
+    }],
+  })
+  const child = {
+    ...threadSummary("child-1", "Child"),
+    source: "subAgent",
+    parentThreadId: "thread-1",
+    agentNickname: "Ada",
+    status: { type: "completed" },
+  }
+  const appServer = {
+    async withSession(callback) {
+      return callback({
+        async listThreads(options) {
+          listCalls.push(options)
+          return { data: [], nextCursor: null }
+        },
+      })
+    },
+    async readThread(threadId, options) {
+      calls.push([threadId, options])
+      return { thread: threadId === "thread-1" ? root : child }
+    },
+  }
+  const result = await createCodexThreadClient({ appServerClient: appServer }).getParticipants("thread-1")
+
+  assert.deepEqual(calls, [
+    ["thread-1", { includeTurns: true }],
+    ["child-1", { includeTurns: false }],
+  ])
+  assert.equal(result.participants[0].agentNickname, "Ada")
+  assert.equal(result.participants[0].parentThreadId, "thread-1")
+  assert.equal(JSON.stringify(result).includes("turns"), false)
+  assert.deepEqual(listCalls[0].sourceKinds, [
+    "subAgent",
+    "subAgentReview",
+    "subAgentCompact",
+    "subAgentThreadSpawn",
+    "subAgentOther",
+  ])
+})
+
+test("client tail performs a fresh stable read for each cycle", async () => {
+  const calls = []
+  const appServer = {
+    async readThread(threadId, options) {
+      calls.push([threadId, options])
+      return { thread: rawThread() }
+    },
+  }
+  const records = []
+  const iterator = createCodexThreadClient({
+    appServerClient: appServer,
+    sleep: async () => {},
+  }).tailThread("thread-1", { maxCycles: 2, interval: 100 })
+  for await (const record of iterator) records.push(record)
+
+  assert.deepEqual(calls, [
+    ["thread-1", { includeTurns: true }],
+    ["thread-1", { includeTurns: true }],
+  ])
+  assert.equal(records.at(-1).data.reason, "max-cycles")
+})
+
+test("client tail preserves paginated-history errors", async () => {
+  const appServer = {
+    async readThread() {
+      throw protocolError("full-history requires paginated thread/turns/list")
+    },
+  }
+  const iterator = createCodexThreadClient({ appServerClient: appServer })
+    .tailThread("thread-1", { once: true })
+  await assert.rejects(async () => {
+    for await (const record of iterator) void record
+  }, UnsupportedHistoryError)
+})

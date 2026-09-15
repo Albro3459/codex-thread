@@ -2,6 +2,12 @@
 
 Notable changes to `codex-thread`, by release.
 
+## 0.2.0
+
+- Follow stored thread changes through bounded or interactive polling
+- Inspect subagent metadata and explicit parent relationships
+- Add versioned tail and participant output schemas
+
 ## 0.1.0
 
 - Read local Codex threads through a short-lived app-server process

@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://codex-thread.dev/schemas/participants.v1.json",
+  "title": "codex-thread participants",
+  "description": "Metadata-only Codex subagent threads discovered from explicit activity and parent relationships.",
+  "type": "object",
+  "required": ["schemaVersion", "toolVersion", "threadId", "ordering", "selection", "counts", "hierarchyAvailable", "participants", "warnings"],
+  "properties": {
+    "schemaVersion": { "const": "codex-thread.participants.v1" },
+    "toolVersion": { "type": "string", "minLength": 1 },
+    "threadId": { "type": "string", "minLength": 1 },
+    "ordering": {
+      "type": "object",
+      "required": ["sortBy", "direction"],
+      "properties": {
+        "sortBy": { "const": "firstDiscovery" },
+        "direction": { "type": "string", "enum": ["asc", "desc"] }
+      },
+      "additionalProperties": false
+    },
+    "selection": { "type": ["object", "null"] },
+    "counts": {
+      "type": "object",
+      "required": ["total", "returned", "hasMore"],
+      "properties": {
+        "total": { "type": "integer", "minimum": 0 },
+        "returned": { "type": "integer", "minimum": 0 },
+        "hasMore": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    },
+    "hierarchyAvailable": { "type": "boolean" },
+    "participants": { "type": "array", "items": { "$ref": "#/$defs/participant" } },
+    "warnings": { "type": "array", "items": { "$ref": "#/$defs/warning" } }
+  },
+  "$defs": {
+    "participant": {
+      "type": "object",
+      "required": [
+        "threadId", "parentThreadId", "path", "depth", "title", "source",
+        "agentNickname", "agentRole", "model", "reasoningEffort", "status", "state",
+        "agentPath", "turnId", "turnIds", "firstSeenAt", "lastSeenAt", "activityCount", "discoveredBy"
+      ],
+      "properties": {
+        "threadId": { "type": "string", "minLength": 1 },
+        "parentThreadId": { "type": ["string", "null"] },
+        "path": { "type": ["string", "null"] },
+        "depth": { "type": ["integer", "null"], "minimum": 0 },
+        "title": { "type": ["string", "null"] },
+        "source": {},
+        "agentNickname": { "type": ["string", "null"] },
+        "agentRole": { "type": ["string", "null"] },
+        "model": { "type": ["string", "null"] },
+        "reasoningEffort": { "type": ["string", "null"] },
+        "status": {},
+        "state": { "type": "string", "enum": ["finished", "running", "unknown"] },
+        "agentPath": { "type": ["string", "null"] },
+        "turnId": { "type": ["string", "null"] },
+        "turnIds": { "type": "array", "items": { "type": "string" } },
+        "firstSeenAt": { "type": ["string", "null"] },
+        "lastSeenAt": { "type": ["string", "null"] },
+        "activityCount": { "type": "integer", "minimum": 0 },
+        "discoveredBy": { "type": "array", "items": { "$ref": "#/$defs/evidence" } },
+        "adapterSpecific": { "type": "object" },
+        "children": { "type": "array", "items": { "$ref": "#/$defs/participant" } }
+      },
+      "additionalProperties": false
+    },
+    "evidence": {
+      "type": "object",
+      "required": ["activityId", "kind"],
+      "properties": {
+        "activityId": { "type": ["string", "null"] },
+        "kind": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": false
+    },
+    "warning": {
+      "type": "object",
+      "required": ["code", "message", "details"],
+      "properties": {
+        "code": { "type": "string", "minLength": 1 },
+        "message": { "type": "string", "minLength": 1 },
+        "details": { "type": "object" }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

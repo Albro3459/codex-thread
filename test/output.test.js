@@ -11,6 +11,9 @@ import {
 import {
   formatCollectionJson,
   formatCollectionJsonl,
+  formatParticipantsHuman,
+  formatParticipantsJson,
+  formatParticipantsJsonl,
   formatThreadJsonl,
 } from "../src/output.js"
 import { rawThread, threadSummary } from "./fixtures/raw-thread-fixture.js"
@@ -72,4 +75,51 @@ test("list and find JSON output remain metadata-only", () => {
   const findRecords = parseJsonLines(formatCollectionJsonl(find))
   assert.deepEqual(listRecords.map((record) => record.recordType), ["header", "thread"])
   assert.deepEqual(findRecords.map((record) => record.recordType), ["header", "thread"])
+})
+
+test("participant output keeps JSONL flat and metadata-only", () => {
+  const participant = {
+    threadId: "child-1",
+    parentThreadId: "thread-1",
+    path: "main.subagent1",
+    depth: 1,
+    title: "Worker",
+    source: "subAgent",
+    agentNickname: "Ada",
+    agentRole: "worker",
+    model: "gpt-test",
+    reasoningEffort: "high",
+    status: { type: "completed" },
+    state: "finished",
+    agentPath: null,
+    turnId: "turn-1",
+    turnIds: ["turn-1"],
+    firstSeenAt: null,
+    lastSeenAt: null,
+    activityCount: 1,
+    discoveredBy: [{ activityId: "activity-1", kind: "collabAgentToolCall" }],
+  }
+  const envelope = {
+    schemaVersion: "codex-thread.participants.v1",
+    toolVersion: "0.2.0",
+    threadId: "thread-1",
+    ordering: { sortBy: "firstDiscovery", direction: "asc" },
+    selection: null,
+    counts: { total: 1, returned: 1, hasMore: false },
+    hierarchyAvailable: true,
+    participants: [participant],
+    warnings: [],
+  }
+  assertSchema(envelope, "participants")
+  const records = parseJsonLines(formatParticipantsJsonl(envelope))
+  assert.deepEqual(records.map((entry) => entry.recordType), ["header", "participant"])
+  for (const entry of records) assertSchema(entry, "jsonl-record")
+  for (const output of [
+    formatParticipantsJson(envelope),
+    formatParticipantsJsonl(envelope),
+    formatParticipantsHuman(envelope),
+  ]) {
+    assert.equal(output.includes("prompt"), false)
+    assert.equal(output.includes("tool output"), false)
+  }
 })

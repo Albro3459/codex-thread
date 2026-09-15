@@ -12,15 +12,30 @@ import {
   formatCollectionJson,
   formatCollectionJsonl,
   formatDoctorJson,
+  formatParticipantsHuman,
+  formatParticipantsJson,
+  formatParticipantsJsonl,
+  formatTailJson,
+  formatTailRecordJsonl,
   formatThreadHuman,
   formatThreadJson,
   formatThreadJsonl,
 } from "./output.js"
 import { formatBundledSchema } from "./schema.js"
 import { installBundledSkill } from "./skill-install.js"
+import { normalizeTailOptions } from "./tail.js"
 import { VERSION } from "./version.js"
 
-const COMMANDS = new Set(["list", "find", "get", "doctor", "schema", "install"])
+const COMMANDS = new Set([
+  "list",
+  "find",
+  "get",
+  "tail",
+  "participants",
+  "doctor",
+  "schema",
+  "install",
+])
 const FORMATS = new Set(["human", "json", "jsonl"])
 const NEGATIVE_NUMBER = /^-\d/u
 
@@ -32,11 +47,16 @@ const OPTIONS = Object.freeze({
   "--turn": { key: "turn", value: true },
   "--turn-limit": { key: "turnLimit", value: true },
   "--turn-offset": { key: "turnOffset", value: true },
+  "--interval": { key: "interval", value: true },
+  "--max-cycles": { key: "maxCycles", value: true },
+  "--timeout": { key: "timeout", value: true },
   "--skills": { key: "skills", value: true },
   "--reverse": { key: "reverse", value: false },
   "--archived": { key: "archived", value: false },
   "--include-subagents": { key: "includeSubagents", value: false },
   "--last-turn": { key: "lastTurn", value: false },
+  "--once": { key: "once", value: false },
+  "--tree": { key: "tree", value: false },
   "--overwrite": { key: "overwrite", value: false },
   "--backup": { key: "backup", value: false },
 })
@@ -45,6 +65,18 @@ const ALLOWED_OPTIONS = Object.freeze({
   list: new Set(["format", "limit", "offset", "reverse", "archived", "includeSubagents"]),
   find: new Set(["format", "title", "reverse", "archived", "includeSubagents"]),
   get: new Set(["format", "turn", "turnLimit", "turnOffset", "lastTurn"]),
+  tail: new Set(["format", "once", "interval", "maxCycles", "timeout", "turnLimit"]),
+  participants: new Set([
+    "format",
+    "turn",
+    "turnLimit",
+    "turnOffset",
+    "lastTurn",
+    "limit",
+    "offset",
+    "reverse",
+    "tree",
+  ]),
   doctor: new Set(["format"]),
   schema: new Set(),
   install: new Set(["format", "skills", "overwrite", "backup"]),
@@ -72,11 +104,16 @@ export function parseCliArgs(argv = []) {
     turn: undefined,
     turnLimit: undefined,
     turnOffset: undefined,
+    interval: undefined,
+    maxCycles: undefined,
+    timeout: undefined,
     skills: undefined,
     reverse: false,
     archived: false,
     includeSubagents: false,
     lastTurn: false,
+    once: false,
+    tree: false,
     overwrite: false,
     backup: false,
     help: false,
@@ -142,6 +179,17 @@ function validateCommandOptions(parsed) {
   if (parsed.command === "install" && parsed.format === "jsonl") {
     throw new InvalidArgumentsError("install does not support jsonl output.", { field: "format" })
   }
+  if (parsed.command === "tail" && parsed.format === "human") {
+    throw new InvalidArgumentsError("tail supports json or jsonl output.", { field: "format" })
+  }
+  if (parsed.command === "tail") {
+    normalizeTailOptions({ ...parsed, format: parsed.format ?? "jsonl" })
+  }
+  if (parsed.command === "participants" && parsed.tree && parsed.format === "jsonl") {
+    throw new InvalidArgumentsError("participants --tree does not support jsonl output.", {
+      field: "tree",
+    })
+  }
 }
 
 function requireArgs(parsed, count, usage) {
@@ -162,6 +210,8 @@ Usage:
   codex-thread list [--limit N] [--offset N] [--reverse] [--archived] [--include-subagents]
   codex-thread find --title TEXT [--reverse] [--archived] [--include-subagents]
   codex-thread get THREAD [--last-turn | --turn ID | --turn-limit N --turn-offset N]
+  codex-thread tail THREAD [--once] [--interval MS] [--max-cycles N] [--timeout MS] [--turn-limit N]
+  codex-thread participants THREAD [--last-turn | --turn ID | --turn-limit N --turn-offset N] [--limit N] [--offset N] [--reverse] [--tree]
   codex-thread doctor
   codex-thread schema NAME
   codex-thread install --skills codex [--overwrite | --backup]
@@ -177,7 +227,14 @@ Machine errors are JSON on stderr.
 }
 
 function write(stream, value) {
-  stream.write(value.endsWith("\n") ? value : `${value}\n`)
+  if (stream.destroyed || stream.writableEnded) return false
+  try {
+    stream.write(value.endsWith("\n") ? value : `${value}\n`)
+    return true
+  } catch (error) {
+    if (error?.code === "EPIPE") return false
+    throw error
+  }
 }
 
 function formatCollection(envelope, format) {
@@ -201,8 +258,9 @@ function turnSelectionExitCode(envelope) {
 export async function run(parsed, {
   stdout = process.stdout,
   createClient = createCodexThreadClient,
+  signal,
 } = {}) {
-  const format = parsed.format ?? "human"
+  const format = parsed.format ?? (parsed.command === "tail" ? "jsonl" : "human")
 
   if (parsed.command === "schema") {
     requireArgs(parsed, 1, "codex-thread schema <schema-name>")
@@ -266,6 +324,44 @@ export async function run(parsed, {
     write(stdout, formatThread(result, format))
     return turnSelectionExitCode(result)
   }
+  if (parsed.command === "tail") {
+    requireArgs(parsed, 1, "codex-thread tail <thread-reference> [options]")
+    const records = []
+    let lastRecord = null
+    for await (const recordValue of client.tailThread(parsed.args[0], {
+      once: parsed.once,
+      interval: parsed.interval,
+      maxCycles: parsed.maxCycles,
+      timeout: parsed.timeout,
+      turnLimit: parsed.turnLimit,
+      format,
+      signal,
+    })) {
+      lastRecord = recordValue
+      if (format === "json") records.push(recordValue)
+      else if (!write(stdout, formatTailRecordJsonl(recordValue))) break
+    }
+    if (format === "json") write(stdout, formatTailJson(records))
+    const reason = lastRecord?.recordType === "end" ? lastRecord.data.reason : null
+    return reason === "thread-not-found" ? EXIT_CODES.NOT_FOUND : EXIT_CODES.SUCCESS
+  }
+  if (parsed.command === "participants") {
+    requireArgs(parsed, 1, "codex-thread participants <thread-reference> [options]")
+    const result = await client.getParticipants(parsed.args[0], {
+      lastTurn: parsed.lastTurn,
+      turnId: parsed.turn,
+      turnLimit: parsed.turnLimit,
+      turnOffset: parsed.turnOffset,
+      limit: parsed.limit,
+      offset: parsed.offset,
+      reverse: parsed.reverse,
+      tree: parsed.tree,
+    })
+    if (format === "json") write(stdout, formatParticipantsJson(result))
+    else if (format === "jsonl") write(stdout, formatParticipantsJsonl(result))
+    else write(stdout, formatParticipantsHuman(result))
+    return turnSelectionExitCode(result)
+  }
 
   throw new UnknownCommandError(parsed.command)
 }
@@ -274,7 +370,11 @@ export async function main(argv = process.argv.slice(2), {
   stdout = process.stdout,
   stderr = process.stderr,
   createClient = createCodexThreadClient,
+  signalSource = process,
 } = {}) {
+  let onSigint = null
+  let onStdoutError = null
+  let outputFailure = null
   try {
     const parsed = parseCliArgs(argv)
     if (parsed.version) {
@@ -286,10 +386,29 @@ export async function main(argv = process.argv.slice(2), {
       return EXIT_CODES.SUCCESS
     }
     validateCommandOptions(parsed)
-    return await run(parsed, { stdout, createClient })
+    let signal
+    if (parsed.command === "tail") {
+      const controller = new AbortController()
+      signal = controller.signal
+      onSigint = () => controller.abort()
+      signalSource.once("SIGINT", onSigint)
+      if (typeof stdout.on === "function") {
+        onStdoutError = (error) => {
+          if (error?.code !== "EPIPE") outputFailure = error
+          controller.abort()
+        }
+        stdout.on("error", onStdoutError)
+      }
+    }
+    const exitCode = await run(parsed, { stdout, createClient, signal })
+    if (outputFailure) throw outputFailure
+    return exitCode
   } catch (error) {
     const normalized = toCodexThreadError(error)
     write(stderr, JSON.stringify(serializeError(normalized)))
     return normalized.exitCode
+  } finally {
+    if (onSigint) signalSource.off("SIGINT", onSigint)
+    if (onStdoutError && typeof stdout.off === "function") stdout.off("error", onStdoutError)
   }
 }

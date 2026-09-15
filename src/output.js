@@ -60,6 +60,17 @@ function collectionJsonlRecords(envelope) {
   ]
 }
 
+export function jsonlRecordsForParticipants(envelope) {
+  const { participants, ...metadata } = envelope
+  return [
+    record("header", metadata, { threadId: envelope.threadId }),
+    ...participants.map((participant) => record("participant", participant, {
+      threadId: participant.threadId,
+      turnId: participant.turnId ?? null,
+    })),
+  ]
+}
+
 export function formatThreadJson(envelope) {
   return json(envelope)
 }
@@ -74,6 +85,58 @@ export function formatCollectionJson(envelope) {
 
 export function formatCollectionJsonl(envelope) {
   return jsonl(collectionJsonlRecords(envelope))
+}
+
+export function formatParticipantsJson(envelope) {
+  return json(envelope)
+}
+
+export function formatParticipantsJsonl(envelope) {
+  return jsonl(jsonlRecordsForParticipants(envelope))
+}
+
+function participantLines(participant, indent = "") {
+  const lines = [
+    `${indent}${participant.path || participant.threadId}`,
+    `${indent}  ID: ${participant.threadId}`,
+    `${indent}  Parent: ${display(participant.parentThreadId)}`,
+    `${indent}  Agent: ${display(participant.agentNickname || participant.agentRole)}`,
+    `${indent}  State: ${display(participant.state)}`,
+  ]
+  for (const child of participant.children ?? []) {
+    lines.push(...participantLines(child, `${indent}  `))
+  }
+  return lines
+}
+
+export function formatParticipantsHuman(envelope) {
+  const lines = [
+    "Codex thread participants",
+    "=========================",
+    "",
+    `Thread: ${envelope.threadId}`,
+    `Returned: ${envelope.counts.returned}`,
+    `Discovered: ${envelope.counts.total}`,
+    `Hierarchy available: ${envelope.hierarchyAvailable ? "yes" : "no"}`,
+    "",
+  ]
+  if (envelope.participants.length === 0) lines.push("No subagents found.")
+  for (const participant of envelope.participants) {
+    lines.push(...participantLines(participant), "")
+  }
+  if (envelope.warnings.length > 0) {
+    lines.push("Warnings", "--------")
+    for (const warning of envelope.warnings) lines.push(`${warning.code}: ${warning.message}`)
+  }
+  return `${lines.join("\n")}\n`
+}
+
+export function formatTailJson(records) {
+  return json(records)
+}
+
+export function formatTailRecordJsonl(recordValue) {
+  return `${JSON.stringify(recordValue)}\n`
 }
 
 export function formatThreadHuman(envelope) {

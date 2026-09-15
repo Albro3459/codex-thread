@@ -1,4 +1,7 @@
-import { createAppServerClient } from "./app-server.js"
+import {
+  createAppServerClient,
+  SUBAGENT_SOURCE_KINDS,
+} from "./app-server.js"
 import {
   AppServerProtocolError,
   ThreadNotFoundError,
@@ -14,7 +17,9 @@ import {
   normalizeListOptions,
   normalizeTurnSelection,
 } from "./query-options.js"
+import { discoverParticipants } from "./participants.js"
 import { parseThreadReference, validateThreadId } from "./reference.js"
+import { tailThread as followThread } from "./tail.js"
 import { VERSION } from "./version.js"
 
 const SERVER_PAGE_LIMIT = 100
@@ -89,6 +94,21 @@ function assertThreadResponse(thread, threadId) {
   }
 }
 
+function assertThreadMetadataResponse(thread, threadId) {
+  if (thread === null || thread === undefined) throw new ThreadNotFoundError(threadId)
+  if (!isObject(thread)) {
+    throw new AppServerProtocolError("Codex app-server returned invalid thread metadata.", {
+      threadId,
+    })
+  }
+  if (thread.id !== threadId) {
+    throw new AppServerProtocolError("Codex app-server returned metadata for the wrong thread.", {
+      requestedThreadId: threadId,
+      returnedThreadId: thread.id ?? null,
+    })
+  }
+}
+
 async function collectThreads(session, options, { stopAfter = null } = {}) {
   const threads = []
   const seenCursors = new Set()
@@ -103,6 +123,7 @@ async function collectThreads(session, options, { stopAfter = null } = {}) {
       sortDirection: options.reverse ? "desc" : "asc",
       archived: options.archived,
       includeSubagents: options.includeSubagents,
+      ...(options.sourceKinds ? { sourceKinds: options.sourceKinds } : {}),
     })
     assertListResponse(response)
     threads.push(...response.data)
@@ -192,6 +213,70 @@ export function createCodexThreadClient(options = {}) {
         observedAt: new Date(now()).toISOString(),
       })
     },
+
+    tailThread(threadReference, requestOptions = {}) {
+      const threadId = parseThreadReference(threadReference)
+      return followThread({
+        threadId,
+        options: requestOptions,
+        now,
+        sleep: options.sleep,
+        signal: requestOptions.signal,
+        readSnapshot: async () => {
+          let response
+          try {
+            response = await appServer.readThread(threadId, { includeTurns: true })
+          } catch (error) {
+            if (protocolThreadNotFound(error)) throw new ThreadNotFoundError(threadId)
+            if (protocolNeedsExperimentalPagination(error)) throw new UnsupportedHistoryError(threadId)
+            throw error
+          }
+          assertThreadResponse(response?.thread, threadId)
+          return normalizeThread(response.thread, {
+            toolVersion: VERSION,
+            observedAt: new Date(now()).toISOString(),
+          })
+        },
+      })
+    },
+
+    async getParticipants(threadReference, requestOptions = {}) {
+      const threadId = parseThreadReference(threadReference)
+      const selection = normalizeTurnSelection(requestOptions)
+      let rootResponse
+      try {
+        rootResponse = await appServer.readThread(threadId, { includeTurns: true })
+      } catch (error) {
+        if (protocolThreadNotFound(error)) throw new ThreadNotFoundError(threadId)
+        if (protocolNeedsExperimentalPagination(error)) throw new UnsupportedHistoryError(threadId)
+        throw error
+      }
+      assertThreadResponse(rootResponse?.thread, threadId)
+      const root = normalizeThread(rootResponse.thread, {
+        selection,
+        toolVersion: VERSION,
+        observedAt: new Date(now()).toISOString(),
+      })
+      const listOptions = {
+        reverse: false,
+        archived: false,
+        includeSubagents: true,
+        sourceKinds: [...SUBAGENT_SOURCE_KINDS],
+      }
+      const listed = await appServer.withSession((session) => collectThreads(session, listOptions))
+      return discoverParticipants({
+        threadId,
+        root,
+        listedThreads: listed.threads,
+        options: { ...requestOptions, selection },
+        toolVersion: VERSION,
+        readThread: async (childThreadId) => {
+          const response = await appServer.readThread(childThreadId, { includeTurns: false })
+          assertThreadMetadataResponse(response?.thread, childThreadId)
+          return response
+        },
+      })
+    },
   })
 }
 
@@ -228,6 +313,22 @@ export {
   normalizePositiveCount,
   normalizeTurnSelection,
 } from "./query-options.js"
+export {
+  DEFAULT_TAIL_INTERVAL_MS,
+  MAX_TAIL_INTERVAL_MS,
+  MIN_TAIL_INTERVAL_MS,
+  TAIL_SCHEMA_VERSION,
+  normalizeTailOptions,
+  snapshotRecords,
+  tailThread,
+} from "./tail.js"
+export {
+  DEFAULT_PARTICIPANT_LIMIT,
+  PARTICIPANTS_SCHEMA_VERSION,
+  buildParticipants,
+  discoverParticipants,
+  normalizeParticipantsOptions,
+} from "./participants.js"
 export {
   DOCTOR_SCHEMA_VERSION,
   doctorExitCode,

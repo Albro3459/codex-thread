@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://codex-thread.dev/schemas/tail-record.v1.json",
+  "title": "codex-thread tail record",
+  "description": "One change-oriented record emitted while polling a stored Codex thread.",
+  "type": "object",
+  "required": ["schemaVersion", "op", "recordType", "threadId", "observedAt", "cycle", "data"],
+  "properties": {
+    "schemaVersion": { "const": "codex-thread.tail-record.v1" },
+    "op": { "type": "string", "enum": ["upsert", "runtime", "end"] },
+    "recordType": { "type": "string", "enum": ["thread", "turn", "message", "activity", "runtime", "end"] },
+    "threadId": { "type": "string" },
+    "observedAt": { "type": "string", "format": "date-time" },
+    "cycle": { "type": "integer", "minimum": 0 },
+    "data": { "type": "object" }
+  },
+  "additionalProperties": false
+}
