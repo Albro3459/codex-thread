@@ -1,7 +1,7 @@
 {
   "name": "@albro3459/codex-thread",
-  "version": "0.0.1",
-  "description": "...",
+  "version": "0.1.0",
+  "description": "Read-only local retrieval of Codex conversation threads",
   "author": "Alexander Brodsky",
   "license": "MIT",
   "type": "module",
