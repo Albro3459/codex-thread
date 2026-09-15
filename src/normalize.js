@@ -269,11 +269,20 @@ export function normalizeThread(raw = {}, {
   }
 
   const runtimeStatus = raw.status ?? { type: "unknown" }
+  const latestReturnedTurn = selected.turns.at(-1) ?? null
+  const returnedTurnInProgress = latestReturnedTurn?.status === "inProgress"
   if (runtimeStatus?.type === "active") {
     warnings.push({
       code: "ACTIVE_THREAD_MAY_CHANGE",
       message: "The thread is active and its stored history may still change.",
       details: { activeFlags: runtimeStatus.activeFlags ?? [] },
+    })
+  }
+  if (returnedTurnInProgress) {
+    warnings.push({
+      code: "TURN_IN_PROGRESS",
+      message: "The latest returned turn is still in progress and its items may change.",
+      details: { turnId: latestReturnedTurn.id ?? null },
     })
   }
 
@@ -288,7 +297,7 @@ export function normalizeThread(raw = {}, {
       status: runtimeStatus,
       observedAt,
       scope: "spawned-app-server",
-      historyMayChange: runtimeStatus?.type === "active",
+      historyMayChange: runtimeStatus?.type === "active" || returnedTurnInProgress,
     },
     warnings,
   }

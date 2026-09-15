@@ -104,6 +104,18 @@ export class AppServerTimeoutError extends AppServerError {
   }
 }
 
+export class UnsupportedHistoryError extends AppServerError {
+  constructor(threadId) {
+    super("This Codex thread uses paginated history, which v1 cannot read through stable APIs.", {
+      threadId,
+      requiredMethods: ["thread/turns/list", "thread/items/list"],
+      experimentalApiRequired: true,
+    })
+    this.name = "UnsupportedHistoryError"
+    this.code = "PAGINATED_HISTORY_UNSUPPORTED"
+  }
+}
+
 export class SkillInstallationError extends CodexThreadError {
   constructor(message, details = {}, cause) {
     super(message, {

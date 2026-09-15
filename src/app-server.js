@@ -1,6 +1,7 @@
 import fs from "node:fs"
 import path from "node:path"
 import { spawn as nodeSpawn } from "node:child_process"
+import { StringDecoder } from "node:string_decoder"
 
 import {
   AppServerError,
@@ -79,31 +80,30 @@ function isObject(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value)
 }
 
-function protocolErrorMessage(error) {
-  if (!isObject(error)) {
-    return "Codex app-server returned an error response."
-  }
-
-  if (typeof error.message === "string" && error.message.length > 0) {
-    return "Codex app-server rejected the request: " + boundedText(error.message, 4_096)
-  }
-
-  return "Codex app-server returned an error response."
-}
-
 function protocolErrorDetails(error) {
   if (!isObject(error)) {
-    return { error: boundedText(JSON.stringify(error), 4_096) }
+    return {}
   }
 
   const details = {}
   if (typeof error.code === "number" || typeof error.code === "string") {
     details.serverCode = error.code
   }
-  if (typeof error.message === "string") {
-    details.serverMessage = boundedText(error.message, 4_096)
-  }
   return details
+}
+
+function appServerResponseError(error) {
+  const result = new AppServerProtocolError(
+    "Codex app-server rejected the request.",
+    protocolErrorDetails(error),
+  )
+  if (isObject(error) && typeof error.message === "string") {
+    Object.defineProperty(result, "serverMessage", {
+      value: boundedText(error.message, 4_096),
+      enumerable: false,
+    })
+  }
+  return result
 }
 
 function pathCandidates(command, env, platform) {
@@ -199,6 +199,8 @@ class AppServerSession {
     this.seenResponseIds = new Set()
     this.stdoutBuffer = ""
     this.stderr = ""
+    this.stdoutDecoder = new StringDecoder("utf8")
+    this.stderrDecoder = new StringDecoder("utf8")
     this.started = false
     this.closing = false
     this.closed = false
@@ -321,6 +323,8 @@ class AppServerSession {
         }, error))
     })
     child.once("close", (code, signal) => {
+      this.stdoutBuffer += this.stdoutDecoder.end()
+      this.stderr = boundedText(this.stderr + this.stderrDecoder.end(), this.maxStderrBytes)
       if (this.stdoutBuffer.trim() !== "") {
         const trailing = this.stdoutBuffer
         this.stdoutBuffer = ""
@@ -335,7 +339,6 @@ class AppServerSession {
       this.fail(new CodexUnavailableError("The Codex app-server exited before completing the request.", {
         exitCode: code,
         signal: signal || null,
-        stderr: this.stderr || null,
       }))
     })
     child.stdout?.on("data", (chunk) => this.consumeStdout(chunk))
@@ -344,7 +347,7 @@ class AppServerSession {
     })
     child.stderr?.on("data", (chunk) => {
       this.stderr = boundedText(
-        this.stderr + (Buffer.isBuffer(chunk) ? chunk.toString("utf8") : chunk),
+        this.stderr + (Buffer.isBuffer(chunk) ? this.stderrDecoder.write(chunk) : String(chunk)),
         this.maxStderrBytes,
       )
     })
@@ -363,7 +366,7 @@ class AppServerSession {
       return
     }
 
-    this.stdoutBuffer += Buffer.isBuffer(chunk) ? chunk.toString("utf8") : String(chunk)
+    this.stdoutBuffer += Buffer.isBuffer(chunk) ? this.stdoutDecoder.write(chunk) : String(chunk)
     let newlineIndex = this.stdoutBuffer.indexOf("\n")
     while (newlineIndex !== -1) {
       const line = this.stdoutBuffer.slice(0, newlineIndex).replace(/\r$/u, "")
@@ -414,10 +417,7 @@ class AppServerSession {
     this.pending.delete(idKey)
 
     if (Object.prototype.hasOwnProperty.call(message, "error")) {
-      pending.reject(new AppServerProtocolError(
-        protocolErrorMessage(message.error),
-        protocolErrorDetails(message.error),
-      ))
+      pending.reject(appServerResponseError(message.error))
       return
     }
 
@@ -433,9 +433,7 @@ class AppServerSession {
 
   write(message) {
     if (!this.child?.stdin || this.child.stdin.destroyed || this.child.stdin.writableEnded) {
-      throw new CodexUnavailableError("The Codex app-server stdin stream is closed.", {
-        stderr: this.stderr || null,
-      })
+      throw new CodexUnavailableError("The Codex app-server stdin stream is closed.")
     }
 
     let serialized
@@ -528,7 +526,6 @@ class AppServerSession {
         throw new CodexUnavailableError("The Codex app-server exited unsuccessfully.", {
           exitCode: status.code,
           signal: status.signal,
-          stderr: this.stderr || null,
         })
       }
     } finally {

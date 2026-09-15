@@ -23,7 +23,12 @@ export function parseThreadReference(value) {
     }
 
     const parts = parsed.pathname.split("/").filter(Boolean)
-    if (parsed.protocol !== "codex:" || parsed.hostname !== "threads" || parts.length !== 1) {
+    if (parsed.protocol !== "codex:"
+      || parsed.hostname !== "threads"
+      || parsed.username
+      || parsed.password
+      || parsed.port
+      || parts.length !== 1) {
       throw new InvalidArgumentsError("Codex deep link must use codex://threads/<thread-id>.", {
         field: "threadReference",
         value,
@@ -35,7 +40,15 @@ export function parseThreadReference(value) {
         value,
       })
     }
-    return validateThreadId(decodeURIComponent(parts[0]))
+    try {
+      return validateThreadId(decodeURIComponent(parts[0]))
+    } catch (error) {
+      if (error instanceof InvalidArgumentsError) throw error
+      throw new InvalidArgumentsError("Codex deep link contains an invalid thread ID.", {
+        field: "threadReference",
+        value,
+      })
+    }
   }
 
   return validateThreadId(reference)

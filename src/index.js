@@ -1,5 +1,9 @@
 import { createAppServerClient } from "./app-server.js"
-import { AppServerProtocolError, ThreadNotFoundError } from "./errors.js"
+import {
+  AppServerProtocolError,
+  ThreadNotFoundError,
+  UnsupportedHistoryError,
+} from "./errors.js"
 import {
   normalizeThread,
   normalizeThreadList,
@@ -58,11 +62,21 @@ async function collectThreads(session, options, { stopAfter = null } = {}) {
 
 function protocolThreadNotFound(error) {
   if (!(error instanceof AppServerProtocolError)) return false
-  const message = `${error.message} ${error.details?.serverMessage ?? ""}`.toLowerCase()
+  const message = `${error.message} ${error.serverMessage ?? ""}`.toLowerCase()
   return message.includes("thread") && (
     message.includes("not found")
     || message.includes("does not exist")
     || message.includes("no rollout")
+  )
+}
+
+function protocolNeedsExperimentalPagination(error) {
+  if (!(error instanceof AppServerProtocolError)) return false
+  const message = `${error.message} ${error.serverMessage ?? ""}`.toLowerCase()
+  return message.includes("paginated") && (
+    message.includes("includeturns")
+    || message.includes("thread/turns/list")
+    || message.includes("full-history")
   )
 }
 
@@ -108,6 +122,7 @@ export function createCodexThreadClient(options = {}) {
         response = await appServer.readThread(threadId, { includeTurns: true })
       } catch (error) {
         if (protocolThreadNotFound(error)) throw new ThreadNotFoundError(threadId)
+        if (protocolNeedsExperimentalPagination(error)) throw new UnsupportedHistoryError(threadId)
         throw error
       }
       if (!response?.thread || response.thread.id !== threadId) {
@@ -115,6 +130,11 @@ export function createCodexThreadClient(options = {}) {
         throw new AppServerProtocolError("Codex app-server returned the wrong thread.", {
           requestedThreadId: threadId,
           returnedThreadId: response.thread.id ?? null,
+        })
+      }
+      if (!Array.isArray(response.thread.turns)) {
+        throw new AppServerProtocolError("Codex app-server omitted turns from a full thread read.", {
+          threadId,
         })
       }
       return normalizeThread(response.thread, {
@@ -138,6 +158,7 @@ export {
   SkillInstallationError,
   ThreadNotFoundError,
   TurnNotFoundError,
+  UnsupportedHistoryError,
   serializeError,
 } from "./errors.js"
 export {

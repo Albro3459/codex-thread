@@ -16,7 +16,11 @@ export function normalizeCount(value, field, fallback) {
     if (!DIGITS.test(value.trim())) {
       throw new InvalidArgumentsError(`${field} must be a non-negative integer.`, { field, value })
     }
-    return Number.parseInt(value.trim(), 10)
+    const count = Number.parseInt(value.trim(), 10)
+    if (!Number.isSafeInteger(count)) {
+      throw new InvalidArgumentsError(`${field} must be a safe integer.`, { field, value })
+    }
+    return count
   }
 
   if (!Number.isSafeInteger(value) || value < 0) {
@@ -42,9 +46,19 @@ function normalizeFlag(value, field) {
 }
 
 export function normalizeListOptions(options = {}) {
+  const limit = normalizePositiveCount(options.limit, "limit", DEFAULT_LIST_LIMIT)
+  const offset = normalizeCount(options.offset, "offset", 0)
+  if (offset > Number.MAX_SAFE_INTEGER - limit - 1) {
+    throw new InvalidArgumentsError("offset and limit are too large when combined.", {
+      fields: ["offset", "limit"],
+      offset,
+      limit,
+    })
+  }
+
   return Object.freeze({
-    limit: normalizePositiveCount(options.limit, "limit", DEFAULT_LIST_LIMIT),
-    offset: normalizeCount(options.offset, "offset", 0),
+    limit,
+    offset,
     reverse: normalizeFlag(options.reverse, "reverse"),
     archived: normalizeFlag(options.archived, "archived"),
     includeSubagents: normalizeFlag(options.includeSubagents, "includeSubagents"),
