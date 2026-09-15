@@ -222,7 +222,7 @@ class AppServerSession {
         this.startupTimeoutMs,
         "startup",
       )
-      this.write({ method: "initialized" })
+      this.write({ method: "initialized", params: {} })
       result = await operation(this.operationClient(), { initialize })
     } catch (error) {
       failure = error
