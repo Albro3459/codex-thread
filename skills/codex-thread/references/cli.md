@@ -9,8 +9,10 @@ caller's environment, including an existing `CODEX_HOME`.
 codex-thread list [--limit N] [--offset N] [--reverse] [--archived] [--include-subagents]
 codex-thread find --title TEXT [--reverse] [--archived] [--include-subagents]
 codex-thread get THREAD_ID|codex://threads/THREAD_ID [--last-turn | --turn ID | --turn-limit N [--turn-offset N]]
+codex-thread tail THREAD_ID|codex://threads/THREAD_ID [--once] [--interval MS] [--max-cycles N] [--timeout MS] [--turn-limit N]
+codex-thread participants THREAD_ID|codex://threads/THREAD_ID [--last-turn | --turn ID | --turn-limit N [--turn-offset N]] [--limit N] [--offset N] [--reverse] [--tree]
 codex-thread doctor
-codex-thread schema thread.v1|list.v1|find.v1|jsonl-record.v1|doctor.v1|error.v1
+codex-thread schema thread.v1|list.v1|find.v1|jsonl-record.v1|tail-record.v1|participants.v1|doctor.v1|error.v1
 codex-thread install --skills codex
 ```
 
@@ -18,6 +20,11 @@ List, find, and get accept `--format human|json|jsonl`. Doctor accepts human or
 JSON. Help and version are available globally. JSON is an envelope. JSONL
 starts with a header and then emits records in chronological order. `find` has
 no limit or offset and returns every title match.
+
+Tail supports JSONL or JSON and defaults to JSONL. JSON requires a bound. The
+interval range is 100 through 60000 milliseconds. `--once` cannot be combined
+with other lifecycle bounds. Participants supports all three formats. `--tree`
+is available for human and JSON output, while JSONL stays flat.
 
 ## Stable schemas
 
@@ -28,6 +35,8 @@ codex-thread.thread.v1
 codex-thread.list.v1
 codex-thread.find.v1
 codex-thread.jsonl-record.v1
+codex-thread.tail-record.v1
+codex-thread.participants.v1
 codex-thread.doctor.v1
 codex-thread.error.v1
 ```

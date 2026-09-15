@@ -38,6 +38,27 @@ For a get response, inspect `runtime.historyMayChange`, the runtime status,
 the newest turn, and `warnings`. Report active-thread uncertainty. Do not infer
 completion from timestamps or from an apparently final message.
 
+Follow stored changes with a bounded tail:
+
+```bash
+codex-thread tail THREAD_ID --max-cycles 10 --turn-limit 3
+```
+
+The first cycle is a baseline. Later cycles contain only upserts for changed or
+new records. An `end` record explains why polling stopped and does not claim the
+thread completed.
+
+Inspect subagent participation through explicit relationships:
+
+```bash
+codex-thread participants THREAD_ID --last-turn --format json
+codex-thread participants THREAD_ID --tree --format json
+```
+
+Participant output excludes child transcripts. Keep warnings when child reads
+fail or parent relationships cannot be resolved. Never infer a relationship
+from thread names, times, or identifiers.
+
 Preserve JSONL order, null values, warnings, and stderr diagnostics. Never
 replace this workflow with direct searches of databases, rollout files,
 browser data, or unrelated logs.

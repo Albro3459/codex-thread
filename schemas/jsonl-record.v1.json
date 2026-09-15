@@ -9,7 +9,7 @@
     "schemaVersion": { "const": "codex-thread.jsonl-record.v1" },
     "recordType": {
       "type": "string",
-      "enum": ["header", "thread", "turn", "message", "activity"]
+      "enum": ["header", "thread", "turn", "message", "activity", "participant"]
     },
     "threadId": { "type": ["string", "null"] },
     "turnId": { "type": ["string", "null"] },

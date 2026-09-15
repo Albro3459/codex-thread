@@ -1,6 +1,6 @@
 ---
 name: "codex-thread"
-description: "Read local Codex threads through the read-only codex-thread CLI. Use for listing, title search, bounded confirmation, selected-turn retrieval, diagnostics, and stable JSON or JSONL output."
+description: "Read local Codex threads through the read-only codex-thread CLI. Use for listing, title search, bounded confirmation, selected-turn retrieval, tailing stored changes, subagent hierarchy inspection, diagnostics, and stable JSON or JSONL output."
 ---
 
 # Codex Thread Skill
@@ -77,17 +77,37 @@ complete and its exit status identifies the class of failure.
    codex-thread get THREAD_ID --format json
    ```
 
+5. Follow an active thread only with a bound:
+
+   ```bash
+   codex-thread tail THREAD_ID --max-cycles 10 --turn-limit 3
+   ```
+
+   Tail emits one baseline and then only new or changed records. It polls stored
+   snapshots and cannot prove the active client completed. Preserve the final
+   `end` reason and all runtime warnings.
+
+6. Inspect subagents without loading child transcripts:
+
+   ```bash
+   codex-thread participants THREAD_ID --last-turn --format json
+   codex-thread participants THREAD_ID --tree --format json
+   ```
+
+   Parent links are explicit evidence. Preserve unresolved and conflicting
+   parent warnings. Do not fill missing hierarchy from names or timestamps.
+
 ## Output rules
 
-Use `--format json` for one `thread.v1`, `list.v1`, `find.v1`, or `doctor.v1`
-envelope. Use `--format jsonl` when a consumer needs records. JSONL starts
+Use `--format json` for one versioned envelope or a bounded tail record array.
+Use `--format jsonl` when a consumer needs records. JSONL starts
 with a header and then emits normalized records in chronological order. Never
 sort those records again.
 
 The presence of `selection` in a thread envelope always means partial history.
 Preserve that fact when summarizing the result. Null values are deliberate and
 unknown values are not evidence that a title, result, parent, or completion
-state can be inferred.
+state can be inferred. Participant output is metadata-only and JSONL stays flat.
 
 Messages contain normalized user and assistant content. Other Codex items are
 activities. Unmapped item types stay under `adapterSpecific` and generate a
@@ -104,8 +124,8 @@ is complete.
 
 The CLI is read-only. Do not search Codex databases, rollout files, browser
 profiles, or unrelated logs. Do not print credentials, authentication data,
-private prompts, or raw diagnostics that contain them. V1 does not resume,
-fork, rename, archive, delete, modify, tail, or build a subagent hierarchy.
+private prompts, or raw diagnostics that contain them. The CLI never resumes,
+forks, renames, archives, deletes, or modifies a thread.
 
 For the command details and stable field meanings, read the bundled references:
 

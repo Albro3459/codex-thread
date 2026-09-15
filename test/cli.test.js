@@ -1,4 +1,5 @@
 import assert from "node:assert/strict"
+import { EventEmitter } from "node:events"
 import test from "node:test"
 
 import { main } from "../src/cli.js"
@@ -97,11 +98,16 @@ test("dispatches list, find, and get options through the injected client", async
     turn: undefined,
     turnLimit: undefined,
     turnOffset: undefined,
+    interval: undefined,
+    maxCycles: undefined,
+    timeout: undefined,
     skills: undefined,
     reverse: true,
     archived: false,
     includeSubagents: false,
     lastTurn: false,
+    once: false,
+    tree: false,
     overwrite: false,
     backup: false,
     help: false,
@@ -201,4 +207,152 @@ test("returns exit code 2 for an exact missing turn warning", async () => {
   assert.equal(result.exitCode, 2)
   assert.equal(result.stderr, "")
   assert.equal(JSON.parse(result.stdout).warnings[0].code, "TURN_NOT_FOUND")
+})
+
+test("dispatches bounded tail records and participant options", async () => {
+  const calls = []
+  const createClient = () => ({
+    async *tailThread(reference, options) {
+      calls.push(["tail", reference, options])
+      yield {
+        schemaVersion: "codex-thread.tail-record.v1",
+        op: "end",
+        recordType: "end",
+        threadId: reference,
+        observedAt: "2023-11-14T22:13:20.000Z",
+        cycle: 1,
+        data: { reason: "once", attemptedCycles: 1 },
+      }
+    },
+    async getParticipants(reference, options) {
+      calls.push(["participants", reference, options])
+      return {
+        schemaVersion: "codex-thread.participants.v1",
+        toolVersion: "0.2.0",
+        threadId: reference,
+        ordering: { sortBy: "firstDiscovery", direction: "desc" },
+        selection: null,
+        counts: { total: 0, returned: 0, hasMore: false },
+        hierarchyAvailable: false,
+        participants: [],
+        warnings: [],
+      }
+    },
+  })
+
+  const tail = await invoke(["tail", "thread-1", "--once"], createClient)
+  assert.equal(tail.exitCode, 0)
+  assert.equal(JSON.parse(tail.stdout).data.reason, "once")
+  const participants = await invoke([
+    "participants", "thread-1", "--last-turn", "--limit", "2", "--reverse", "--format", "json",
+  ], createClient)
+  assert.equal(participants.exitCode, 0)
+  assert.equal(JSON.parse(participants.stdout).schemaVersion, "codex-thread.participants.v1")
+  assert.equal(calls[0][0], "tail")
+  assert.equal(calls[0][2].once, true)
+  assert.equal(calls[0][2].format, "jsonl")
+  assert.deepEqual(calls[1], ["participants", "thread-1", {
+    lastTurn: true,
+    turnId: undefined,
+    turnLimit: undefined,
+    turnOffset: undefined,
+    limit: "2",
+    offset: undefined,
+    reverse: true,
+    tree: false,
+  }])
+})
+
+test("rejects unbounded JSON tails and conflicting tail bounds before creating a client", async () => {
+  for (const argv of [
+    ["tail", "thread-1", "--format", "json"],
+    ["tail", "thread-1", "--once", "--interval", "100"],
+  ]) {
+    let created = false
+    const result = await invoke(argv, () => {
+      created = true
+      return {}
+    })
+    assert.equal(result.exitCode, 3)
+    assert.equal(result.stdout, "")
+    assert.equal(JSON.parse(result.stderr).code, "INVALID_ARGUMENTS")
+    assert.equal(created, false)
+  }
+})
+
+test("stops a tail quietly when stdout closes", async () => {
+  let closed = false
+  const error = Object.assign(new Error("closed"), { code: "EPIPE" })
+  const stdout = { write() { throw error } }
+  const stderr = captureStream()
+  const exitCode = await main(["tail", "thread-1", "--once"], {
+    stdout,
+    stderr: stderr.stream,
+    createClient: () => ({
+      async *tailThread() {
+        try {
+          yield { recordType: "runtime", data: {} }
+          yield { recordType: "end", data: { reason: "once" } }
+        } finally {
+          closed = true
+        }
+      },
+    }),
+  })
+  assert.equal(exitCode, 0)
+  assert.equal(stderr.read(), "")
+  assert.equal(closed, true)
+})
+
+test("SIGINT emits one interrupt end record and exits cleanly", async () => {
+  const signalSource = new EventEmitter()
+  const result = await (async () => {
+    const stdout = captureStream()
+    const stderr = captureStream()
+    const exitCode = await main(["tail", "thread-1"], {
+      stdout: stdout.stream,
+      stderr: stderr.stream,
+      signalSource,
+      createClient: () => ({
+        async *tailThread(reference, options) {
+          signalSource.emit("SIGINT")
+          assert.equal(options.signal.aborted, true)
+          yield {
+            schemaVersion: "codex-thread.tail-record.v1",
+            op: "end",
+            recordType: "end",
+            threadId: reference,
+            observedAt: "2023-11-14T22:13:20.000Z",
+            cycle: 0,
+            data: { reason: "interrupt", attemptedCycles: 0 },
+          }
+        },
+      }),
+    })
+    return { exitCode, stdout: stdout.read(), stderr: stderr.read() }
+  })()
+  assert.equal(result.exitCode, 0)
+  assert.equal(result.stderr, "")
+  const records = result.stdout.trim().split("\n").map((line) => JSON.parse(line))
+  assert.deepEqual(records.map((record) => record.data.reason), ["interrupt"])
+  assert.equal(signalSource.listenerCount("SIGINT"), 0)
+})
+
+test("a thread that disappears during tail emits end and exits 2", async () => {
+  const result = await invoke(["tail", "thread-1", "--max-cycles", "2"], () => ({
+    async *tailThread(reference) {
+      yield {
+        schemaVersion: "codex-thread.tail-record.v1",
+        op: "end",
+        recordType: "end",
+        threadId: reference,
+        observedAt: "2023-11-14T22:13:20.000Z",
+        cycle: 2,
+        data: { reason: "thread-not-found", attemptedCycles: 2 },
+      }
+    },
+  }))
+  assert.equal(result.exitCode, 2)
+  assert.equal(result.stderr, "")
+  assert.equal(JSON.parse(result.stdout).data.reason, "thread-not-found")
 })

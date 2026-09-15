@@ -81,9 +81,38 @@ chronological order. A response with `selection` contains partial history. A
 missing exact turn returns a thread envelope with a `TURN_NOT_FOUND` warning and
 exit code 2. A window past the end is a valid empty result.
 
+## Follow a thread
+
+Poll a stored thread and emit a baseline followed by changed records:
+
+```bash
+codex-thread tail THREAD_ID --max-cycles 10 --turn-limit 3
+codex-thread tail THREAD_ID --once --format json
+```
+
+Tail output defaults to JSONL. Each cycle starts a private app-server
+observation and reads persisted history without resuming the thread. Use
+`--once`, `--max-cycles`, or `--timeout` for bounded agent reads. An unbounded
+JSONL tail runs until interrupted. Quiet cycles emit no duplicate data.
+
+## Inspect subagents
+
+List subagent metadata and explicit parent relationships without loading child
+transcripts:
+
+```bash
+codex-thread participants THREAD_ID --last-turn --format json
+codex-thread participants THREAD_ID --tree
+```
+
+Participant discovery uses explicit Codex subagent activity and parent thread
+metadata. It does not infer hierarchy from names, timestamps, or thread ID
+shape. `--limit`, `--offset`, and `--reverse` control the returned participant
+page. JSONL output remains flat.
+
 ## Output
 
-List, find, and get support all three output formats:
+List, find, get, and participants support all three output formats:
 
 ```text
 --format json
@@ -109,7 +138,7 @@ codex-thread schema thread.v1
 ```
 
 Available schemas are `thread.v1`, `list.v1`, `find.v1`, `jsonl-record.v1`,
-`doctor.v1`, and `error.v1`.
+`tail-record.v1`, `participants.v1`, `doctor.v1`, and `error.v1`.
 
 ## Exit codes
 
@@ -130,10 +159,10 @@ alternate homes, or T3 storage. A caller that sets `CODEX_HOME` keeps Codex's
 normal environment behavior.
 
 The CLI reads stable `thread/list` and `thread/read` app-server methods. It does
-not resume, subscribe to, or modify threads. Active history may change while it
-is being read, and the output reports that state when the spawned app-server can
-observe it. Paginated Codex threads that reject full-history reads require a
-future CLI version.
+not resume, subscribe to, or modify threads. Tail polls stored snapshots, so a
+quiet cycle does not mean an active thread finished. Active history may change
+while it is being read. Paginated Codex threads that reject full-history reads
+still require a future CLI version.
 
 See the official [Codex app-server documentation](https://learn.chatgpt.com/docs/app-server)
 for the underlying protocol.
