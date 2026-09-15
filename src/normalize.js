@@ -77,12 +77,14 @@ function remainingFields(source, excluded) {
   return entries.length > 0 ? Object.fromEntries(entries) : null
 }
 
-export function normalizeThreadSummary(raw = {}, { includeAdapterSpecific = false } = {}) {
+export function normalizeThreadSummary(raw = {}, {
+  includeAdapterSpecific = false,
+  includePreview = true,
+} = {}) {
   const summary = {
     id: raw.id ?? null,
     sessionId: raw.sessionId ?? null,
-    title: raw.name ?? raw.preview ?? null,
-    preview: raw.preview ?? null,
+    title: raw.name ?? null,
     source: raw.source ?? null,
     originator: raw.originator ?? null,
     cwd: raw.cwd ?? null,
@@ -104,6 +106,7 @@ export function normalizeThreadSummary(raw = {}, { includeAdapterSpecific = fals
     agentNickname: raw.agentNickname ?? null,
     agentRole: raw.agentRole ?? null,
   }
+  if (includePreview) summary.preview = raw.preview ?? null
 
   if (includeAdapterSpecific) {
     const adapterSpecific = remainingFields(raw, THREAD_FIELDS)
@@ -298,7 +301,7 @@ export function normalizeThreadList(rawThreads, {
   hasMore,
   toolVersion = VERSION,
 } = {}) {
-  const threads = rawThreads.map((thread) => normalizeThreadSummary(thread))
+  const threads = rawThreads.map((thread) => normalizeThreadSummary(thread, { includePreview: false }))
   return {
     schemaVersion: LIST_SCHEMA_VERSION,
     toolVersion,
@@ -322,7 +325,7 @@ export function normalizeThreadSearch(rawThreads, {
   options,
   toolVersion = VERSION,
 } = {}) {
-  const threads = rawThreads.map((thread) => normalizeThreadSummary(thread))
+  const threads = rawThreads.map((thread) => normalizeThreadSummary(thread, { includePreview: false }))
   return {
     schemaVersion: FIND_SCHEMA_VERSION,
     toolVersion,

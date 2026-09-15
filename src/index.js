@@ -95,8 +95,7 @@ export function createCodexThreadClient(options = {}) {
       const collected = await appServer.withSession((session) => collectThreads(session, findOptions))
       const query = findOptions.title.toLowerCase()
       const matches = collected.threads.filter((thread) => (
-        typeof (thread?.name ?? thread?.preview) === "string"
-        && (thread.name ?? thread.preview).toLowerCase().includes(query)
+        typeof thread?.name === "string" && thread.name.toLowerCase().includes(query)
       ))
       return normalizeThreadSearch(matches, { options: findOptions, toolVersion: VERSION })
     },
