@@ -25,7 +25,7 @@
     "NOTICE.txt"
   ],
   "scripts": {
-    "test": "node --test",
+    "test": "node --test test/*.test.js",
     "check": "node scripts/check-syntax.js",
     "version:update": "npm version patch --no-git-tag-version",
     "deploy": "npm publish --access=public"
