@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://codex-thread.dev/schemas/doctor.v1.json",
+  "title": "codex-thread diagnostics",
+  "description": "A complete installation report. It contains no transcript content, including when a check fails.",
+  "type": "object",
+  "required": ["schemaVersion", "toolVersion", "runtimeVersion", "checks", "versions", "healthy", "status", "warnings"],
+  "properties": {
+    "schemaVersion": { "const": "codex-thread.doctor.v1" },
+    "toolVersion": { "type": "string", "minLength": 1 },
+    "runtimeVersion": { "type": "string" },
+    "checks": {
+      "type": "object",
+      "required": ["node", "codex", "appServer", "initialize", "methods"],
+      "properties": {
+        "node": { "$ref": "#/$defs/check" },
+        "codex": { "$ref": "#/$defs/check" },
+        "appServer": { "$ref": "#/$defs/check" },
+        "initialize": { "$ref": "#/$defs/check" },
+        "methods": { "$ref": "#/$defs/check" }
+      },
+      "additionalProperties": false
+    },
+    "versions": {
+      "type": "object",
+      "required": ["package", "codex", "appServer"],
+      "properties": {
+        "package": { "type": ["string", "null"] },
+        "codex": { "type": ["string", "null"] },
+        "appServer": { "type": ["string", "null"] }
+      },
+      "additionalProperties": false
+    },
+    "healthy": { "type": "boolean" },
+    "status": { "type": "string", "enum": ["ok", "error"] },
+    "warnings": { "type": "array", "items": { "$ref": "#/$defs/warning" } }
+  },
+  "$defs": {
+    "check": {
+      "type": "object",
+      "required": ["ok", "status", "message"],
+      "properties": {
+        "ok": { "type": "boolean" },
+        "status": { "type": "string" },
+        "message": { "type": "string" },
+        "details": { "type": "object" }
+      },
+      "additionalProperties": false
+    },
+    "warning": {
+      "type": "object",
+      "required": ["code", "message"],
+      "properties": {
+        "code": { "type": "string", "minLength": 1 },
+        "message": { "type": "string", "minLength": 1 },
+        "details": { "type": "object" }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

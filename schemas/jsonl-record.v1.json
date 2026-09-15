@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://codex-thread.dev/schemas/jsonl-record.v1.json",
+  "title": "codex-thread JSONL record",
+  "description": "The first record is a header. Remaining normalized records are emitted in chronological order and never need sorting by consumers.",
+  "type": "object",
+  "required": ["schemaVersion", "recordType", "threadId", "turnId", "data"],
+  "properties": {
+    "schemaVersion": { "const": "codex-thread.jsonl-record.v1" },
+    "recordType": {
+      "type": "string",
+      "enum": ["header", "thread", "turn", "message", "activity"]
+    },
+    "threadId": { "type": ["string", "null"] },
+    "turnId": { "type": ["string", "null"] },
+    "data": { "type": "object" },
+    "toolVersion": { "type": "string" },
+    "runtime": { "type": "object" },
+    "selection": { "type": "object" },
+    "filters": { "type": "object" },
+    "ordering": { "type": "object" },
+    "limit": { "type": "integer", "minimum": 0 },
+    "offset": { "type": "integer", "minimum": 0 },
+    "count": { "type": "integer", "minimum": 0 },
+    "hasMore": { "type": "boolean" },
+    "warnings": { "type": "array", "items": { "$ref": "#/$defs/warning" } }
+  },
+  "$defs": {
+    "warning": {
+      "type": "object",
+      "required": ["code", "message"],
+      "properties": {
+        "code": { "type": "string", "minLength": 1 },
+        "message": { "type": "string", "minLength": 1 },
+        "field": { "type": "string" },
+        "details": { "type": "object" }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,96 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://codex-thread.dev/schemas/list.v1.json",
+  "title": "codex-thread list results",
+  "description": "Metadata-only thread summaries. Message, activity, command, tool output, and instruction text are excluded.",
+  "type": "object",
+  "required": ["schemaVersion", "toolVersion", "filters", "ordering", "limit", "offset", "count", "hasMore", "threads"],
+  "properties": {
+    "schemaVersion": { "const": "codex-thread.list.v1" },
+    "toolVersion": { "type": "string", "minLength": 1 },
+    "filters": { "$ref": "#/$defs/filters" },
+    "ordering": { "$ref": "#/$defs/ordering" },
+    "limit": { "type": "integer", "minimum": 0 },
+    "offset": { "type": "integer", "minimum": 0 },
+    "count": { "type": "integer", "minimum": 0 },
+    "hasMore": { "type": "boolean" },
+    "threads": { "type": "array", "items": { "$ref": "#/$defs/threadSummary" } }
+  },
+  "$defs": {
+    "filters": {
+      "type": "object",
+      "required": ["archived", "includeSubagents"],
+      "properties": {
+        "archived": { "type": "boolean" },
+        "includeSubagents": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    },
+    "ordering": {
+      "type": "object",
+      "required": ["sortBy", "direction"],
+      "properties": {
+        "sortBy": { "const": "updatedAt" },
+        "direction": { "type": "string", "enum": ["asc", "desc"] }
+      },
+      "additionalProperties": false
+    },
+    "threadSummary": {
+      "type": "object",
+      "required": [
+        "id",
+        "sessionId",
+        "title",
+        "preview",
+        "source",
+        "originator",
+        "cwd",
+        "projectId",
+        "parentThreadId",
+        "forkedFromId",
+        "ephemeral",
+        "isPinned",
+        "historyMode",
+        "modelProvider",
+        "model",
+        "reasoningEffort",
+        "createdAt",
+        "updatedAt",
+        "recencyAt",
+        "cliVersion",
+        "gitInfo",
+        "section",
+        "agentNickname",
+        "agentRole"
+      ],
+      "properties": {
+        "id": { "type": ["string", "null"] },
+        "sessionId": { "type": ["string", "null"] },
+        "title": { "type": ["string", "null"] },
+        "preview": { "type": ["string", "null"] },
+        "source": {},
+        "originator": { "type": ["string", "null"] },
+        "cwd": { "type": ["string", "null"] },
+        "projectId": { "type": ["string", "null"] },
+        "parentThreadId": { "type": ["string", "null"] },
+        "forkedFromId": { "type": ["string", "null"] },
+        "ephemeral": { "type": ["boolean", "null"] },
+        "isPinned": { "type": ["boolean", "null"] },
+        "historyMode": { "type": ["string", "null"] },
+        "modelProvider": { "type": ["string", "null"] },
+        "model": { "type": ["string", "null"] },
+        "reasoningEffort": { "type": ["string", "null"] },
+        "createdAt": { "type": ["string", "null"] },
+        "updatedAt": { "type": ["string", "null"] },
+        "recencyAt": { "type": ["string", "null"] },
+        "cliVersion": { "type": ["string", "null"] },
+        "gitInfo": {},
+        "section": {},
+        "agentNickname": { "type": ["string", "null"] },
+        "agentRole": { "type": ["string", "null"] }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://codex-thread.dev/schemas/error.v1.json",
+  "title": "codex-thread error",
+  "description": "The machine-readable error written to stderr for a failed command.",
+  "type": "object",
+  "required": ["schemaVersion", "code", "message", "details"],
+  "properties": {
+    "schemaVersion": { "const": "codex-thread.error.v1" },
+    "code": { "type": "string", "minLength": 1 },
+    "message": { "type": "string", "minLength": 1 },
+    "details": { "type": "object" }
+  },
+  "additionalProperties": false
+}
