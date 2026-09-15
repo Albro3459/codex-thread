@@ -1,7 +1,7 @@
 {
   "name": "@albro3459/codex-thread",
-  "version": "0.0.1",
-  "description": "...",
+  "version": "0.1.0",
+  "description": "Read-only local retrieval of Codex conversation threads",
   "author": "Alexander Brodsky",
   "license": "MIT",
   "type": "module",
@@ -25,7 +25,7 @@
     "NOTICE.txt"
   ],
   "scripts": {
-    "test": "node --test",
+    "test": "node --test test/*.test.js",
     "check": "node scripts/check-syntax.js",
     "version:update": "npm version patch --no-git-tag-version",
     "deploy": "npm publish --access=public"

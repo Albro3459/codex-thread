@@ -1,0 +1,180 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://codex-thread.dev/schemas/thread.v1.json",
+  "title": "codex-thread normalized thread",
+  "description": "A normalized, read-only Codex thread. A selection object means that the history is partial.",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "toolVersion",
+    "thread",
+    "turns",
+    "messages",
+    "activities",
+    "runtime",
+    "warnings"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "codex-thread.thread.v1" },
+    "toolVersion": { "type": "string", "minLength": 1 },
+    "thread": { "$ref": "#/$defs/thread" },
+    "turns": { "type": "array", "items": { "$ref": "#/$defs/turn" } },
+    "messages": { "type": "array", "items": { "$ref": "#/$defs/message" } },
+    "activities": { "type": "array", "items": { "$ref": "#/$defs/activity" } },
+    "runtime": { "$ref": "#/$defs/runtime" },
+    "warnings": { "type": "array", "items": { "$ref": "#/$defs/warning" } },
+    "selection": { "$ref": "#/$defs/selection" }
+  },
+  "$defs": {
+    "thread": {
+      "type": "object",
+      "required": [
+        "id",
+        "sessionId",
+        "title",
+        "preview",
+        "source",
+        "originator",
+        "cwd",
+        "projectId",
+        "parentThreadId",
+        "forkedFromId",
+        "ephemeral",
+        "isPinned",
+        "historyMode",
+        "modelProvider",
+        "model",
+        "reasoningEffort",
+        "createdAt",
+        "updatedAt",
+        "recencyAt",
+        "cliVersion",
+        "gitInfo",
+        "section",
+        "agentNickname",
+        "agentRole"
+      ],
+      "properties": {
+        "id": { "type": ["string", "null"] },
+        "sessionId": { "type": ["string", "null"] },
+        "title": { "type": ["string", "null"] },
+        "preview": { "type": ["string", "null"] },
+        "source": {},
+        "originator": { "type": ["string", "null"] },
+        "cwd": { "type": ["string", "null"] },
+        "projectId": { "type": ["string", "null"] },
+        "parentThreadId": { "type": ["string", "null"] },
+        "forkedFromId": { "type": ["string", "null"] },
+        "ephemeral": { "type": ["boolean", "null"] },
+        "isPinned": { "type": ["boolean", "null"] },
+        "historyMode": { "type": ["string", "null"] },
+        "modelProvider": { "type": ["string", "null"] },
+        "model": { "type": ["string", "null"] },
+        "reasoningEffort": { "type": ["string", "null"] },
+        "createdAt": { "type": ["string", "null"] },
+        "updatedAt": { "type": ["string", "null"] },
+        "recencyAt": { "type": ["string", "null"] },
+        "cliVersion": { "type": ["string", "null"] },
+        "gitInfo": {},
+        "section": {},
+        "agentNickname": { "type": ["string", "null"] },
+        "agentRole": { "type": ["string", "null"] },
+        "adapterSpecific": { "type": "object" }
+      },
+      "additionalProperties": false
+    },
+    "turn": {
+      "type": "object",
+      "properties": {
+        "id": { "type": ["string", "null"] },
+        "state": { "type": ["string", "null"] },
+        "status": { "type": ["string", "null"] },
+        "error": {},
+        "durationMs": { "type": ["number", "null"] },
+        "itemsView": {},
+        "itemCount": { "type": "integer", "minimum": 0 },
+        "startedAt": { "type": ["string", "null"] },
+        "completedAt": { "type": ["string", "null"] },
+        "turnId": { "type": ["string", "null"] },
+        "adapterSpecific": { "type": "object" }
+      },
+      "additionalProperties": false
+    },
+    "message": {
+      "type": "object",
+      "properties": {
+        "id": { "type": ["string", "null"] },
+        "messageId": { "type": ["string", "null"] },
+        "threadId": { "type": ["string", "null"] },
+        "turnId": { "type": ["string", "null"] },
+        "role": { "type": ["string", "null"], "enum": ["user", "assistant", null] },
+        "text": { "type": ["string", "null"] },
+        "content": {},
+        "phase": { "type": ["string", "null"] },
+        "createdAt": { "type": ["string", "null"] },
+        "updatedAt": { "type": ["string", "null"] },
+        "isStreaming": { "type": ["boolean", "null"] },
+        "sequence": { "type": "integer", "minimum": 0 },
+        "adapterSpecific": { "type": "object" }
+      },
+      "additionalProperties": false
+    },
+    "activity": {
+      "type": "object",
+      "properties": {
+        "id": { "type": ["string", "null"] },
+        "activityId": { "type": ["string", "null"] },
+        "threadId": { "type": ["string", "null"] },
+        "turnId": { "type": ["string", "null"] },
+        "type": { "type": ["string", "null"] },
+        "kind": { "type": ["string", "null"] },
+        "status": { "type": ["string", "null"] },
+        "summary": { "type": ["string", "null"] },
+        "detail": { "type": ["string", "null"] },
+        "payload": {},
+        "createdAt": { "type": ["string", "null"] },
+        "updatedAt": { "type": ["string", "null"] },
+        "sequence": { "type": ["integer", "null"] },
+        "adapterSpecific": { "type": "object" }
+      },
+      "additionalProperties": false
+    },
+    "runtime": {
+      "type": "object",
+      "required": ["status", "observedAt", "scope", "historyMayChange"],
+      "properties": {
+        "status": {},
+        "observedAt": { "type": "string" },
+        "scope": { "const": "spawned-app-server" },
+        "historyMayChange": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    },
+    "selection": {
+      "description": "The selected turns are emitted in chronological order. Its presence always means partial history.",
+      "type": "object",
+      "required": ["kind", "turnId", "turnLimit", "turnOffset", "totalTurns", "selectedTurnIds"],
+      "properties": {
+        "kind": { "type": "string", "enum": ["turn", "turn-window"] },
+        "turnId": { "type": ["string", "null"] },
+        "turnLimit": { "type": ["integer", "null"], "minimum": 0 },
+        "turnOffset": { "type": ["integer", "null"], "minimum": 0 },
+        "totalTurns": { "type": ["integer", "null"], "minimum": 0 },
+        "selectedTurnIds": { "type": "array", "items": { "type": ["string", "null"] } }
+      },
+      "additionalProperties": false
+    },
+    "warning": {
+      "type": "object",
+      "required": ["code", "message"],
+      "properties": {
+        "code": { "type": "string", "minLength": 1 },
+        "message": { "type": "string", "minLength": 1 },
+        "field": { "type": "string" },
+        "details": { "type": "object" }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

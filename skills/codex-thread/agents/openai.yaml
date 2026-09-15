@@ -1,4 +1,4 @@
 interface:
   display_name: "Codex Thread Skill"
-  short_description: "..."
-  default_prompt: "..."
+  short_description: "Read local Codex threads with bounded, normalized output"
+  default_prompt: "Find or read a local Codex thread with codex-thread, confirm candidates with --last-turn, and report partial history and active-thread warnings honestly."
