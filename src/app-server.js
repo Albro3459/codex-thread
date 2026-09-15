@@ -34,6 +34,14 @@ export const SUBAGENT_SOURCE_KINDS = Object.freeze([
 
 export const READ_METHODS = Object.freeze(new Set(["thread/list", "thread/read"]))
 
+function assertReadMethod(method) {
+  if (!READ_METHODS.has(method)) {
+    throw new AppServerProtocolError("Only stable read methods are available through this client.", {
+      method,
+    })
+  }
+}
+
 function positiveTimeout(value, fallback, field) {
   if (value === undefined) {
     return fallback
@@ -70,6 +78,25 @@ function boundedText(value, maxBytes) {
     return Buffer.from(text, "utf8").subarray(0, maxBytes).toString("utf8")
   }
   return Buffer.from(text, "utf8").subarray(0, maxBytes - markerBytes).toString("utf8") + marker
+}
+
+function stderrReason(text) {
+  const diagnostic = text.toLowerCase()
+  if (/permission denied|access denied|eacces/u.test(diagnostic)) return "permission-denied"
+  if (/not authenticated|unauthorized|sign in|login required/u.test(diagnostic)) {
+    return "authentication-required"
+  }
+  if (/database.*locked|resource busy/u.test(diagnostic)) return "storage-busy"
+  if (/trusted directory|untrusted workspace/u.test(diagnostic)) return "untrusted-workspace"
+  if (/unknown (?:subcommand|command).*app-server|unrecognized.*app-server|unsupported.*app-server/u
+    .test(diagnostic)) {
+    return "app-server-unsupported"
+  }
+  if (/invalid.*config|config.*invalid|failed to (?:read|parse).*config/u.test(diagnostic)) {
+    return "invalid-configuration"
+  }
+  if (/not found|no such file|enoent/u.test(diagnostic)) return "required-file-missing"
+  return "unclassified"
 }
 
 function responseIdKey(id) {
@@ -199,6 +226,8 @@ class AppServerSession {
     this.seenResponseIds = new Set()
     this.stdoutBuffer = ""
     this.stderr = ""
+    this.stderrBytes = 0
+    this.stderrTruncated = false
     this.stdoutDecoder = new StringDecoder("utf8")
     this.stderrDecoder = new StringDecoder("utf8")
     this.started = false
@@ -210,6 +239,7 @@ class AppServerSession {
   }
 
   async run(method, params) {
+    assertReadMethod(method)
     return this.runOperation(({ request }) => request(method, params))
   }
 
@@ -239,6 +269,9 @@ class AppServerSession {
     failure ||= this.failure
 
     if (failure) {
+      if (failure instanceof AppServerError) {
+        failure.details = { ...failure.details, ...this.diagnosticDetails() }
+      }
       throw failure
     }
 
@@ -247,11 +280,7 @@ class AppServerSession {
 
   operationClient() {
     const request = (method, params = {}) => {
-      if (!READ_METHODS.has(method)) {
-        throw new AppServerProtocolError("Only stable read methods are available through this client.", {
-          method,
-        })
-      }
+      assertReadMethod(method)
       return this.request(method, params, this.requestTimeoutMs, "request")
     }
 
@@ -324,7 +353,8 @@ class AppServerSession {
     })
     child.once("close", (code, signal) => {
       this.stdoutBuffer += this.stdoutDecoder.end()
-      this.stderr = boundedText(this.stderr + this.stderrDecoder.end(), this.maxStderrBytes)
+      const trailingStderr = this.stderrDecoder.end()
+      this.captureStderr(trailingStderr)
       if (this.stdoutBuffer.trim() !== "") {
         const trailing = this.stdoutBuffer
         this.stdoutBuffer = ""
@@ -339,6 +369,7 @@ class AppServerSession {
       this.fail(new CodexUnavailableError("The Codex app-server exited before completing the request.", {
         exitCode: code,
         signal: signal || null,
+        ...this.diagnosticDetails(),
       }))
     })
     child.stdout?.on("data", (chunk) => this.consumeStdout(chunk))
@@ -346,10 +377,7 @@ class AppServerSession {
       this.fail(new AppServerProtocolError("The Codex app-server stdout stream failed.", {}, error))
     })
     child.stderr?.on("data", (chunk) => {
-      this.stderr = boundedText(
-        this.stderr + (Buffer.isBuffer(chunk) ? this.stderrDecoder.write(chunk) : String(chunk)),
-        this.maxStderrBytes,
-      )
+      this.captureStderr(Buffer.isBuffer(chunk) ? this.stderrDecoder.write(chunk) : String(chunk))
     })
     child.stderr?.on("error", () => {})
     child.stdin?.on("error", (error) => {
@@ -375,6 +403,23 @@ class AppServerSession {
         this.consumeLine(line)
       }
       newlineIndex = this.stdoutBuffer.indexOf("\n")
+    }
+  }
+
+  captureStderr(text) {
+    if (text === "") return
+    this.stderrBytes += Buffer.byteLength(text, "utf8")
+    this.stderr = boundedText(this.stderr + text, this.maxStderrBytes)
+    this.stderrTruncated ||= this.stderrBytes > this.maxStderrBytes
+  }
+
+  diagnosticDetails() {
+    const captured = this.stderr.trim() !== ""
+    return {
+      stderrCaptured: captured,
+      stderrBytes: this.stderrBytes,
+      stderrTruncated: this.stderrTruncated,
+      stderrReason: captured ? stderrReason(this.stderr) : null,
     }
   }
 
@@ -489,6 +534,9 @@ class AppServerSession {
     if (this.failure) {
       return
     }
+    if (error instanceof AppServerError) {
+      error.details = { ...error.details, ...this.diagnosticDetails() }
+    }
     this.failure = error
     this.rejectStartup?.(error)
     for (const pending of this.pending.values()) {
@@ -526,6 +574,7 @@ class AppServerSession {
         throw new CodexUnavailableError("The Codex app-server exited unsuccessfully.", {
           exitCode: status.code,
           signal: status.signal,
+          ...this.diagnosticDetails(),
         })
       }
     } finally {

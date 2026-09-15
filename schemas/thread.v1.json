@@ -160,7 +160,7 @@
         "turnLimit": { "type": ["integer", "null"], "minimum": 0 },
         "turnOffset": { "type": ["integer", "null"], "minimum": 0 },
         "totalTurns": { "type": ["integer", "null"], "minimum": 0 },
-        "selectedTurnIds": { "type": "array", "items": { "type": "string" } }
+        "selectedTurnIds": { "type": "array", "items": { "type": ["string", "null"] } }
       },
       "additionalProperties": false
     },

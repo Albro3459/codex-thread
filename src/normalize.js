@@ -1,3 +1,4 @@
+import { AppServerProtocolError } from "./errors.js"
 import { VERSION } from "./version.js"
 
 export const THREAD_SCHEMA_VERSION = "codex-thread.thread.v1"
@@ -55,6 +56,43 @@ const THREAD_FIELDS = new Set([
   "turns",
 ])
 
+function isObject(value) {
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+}
+
+function objectValue(value, field) {
+  if (isObject(value)) return value
+  throw new AppServerProtocolError("Codex app-server returned an invalid object.", {
+    field,
+    valueType: value === null ? "null" : typeof value,
+  })
+}
+
+function stringOrNull(value, field) {
+  if (value === null || value === undefined || typeof value === "string") return value ?? null
+  throw new AppServerProtocolError("Codex app-server returned an invalid string field.", {
+    field,
+    valueType: typeof value,
+  })
+}
+
+function booleanOrNull(value, field) {
+  if (value === null || value === undefined || typeof value === "boolean") return value ?? null
+  throw new AppServerProtocolError("Codex app-server returned an invalid boolean field.", {
+    field,
+    valueType: typeof value,
+  })
+}
+
+function finiteNumberOrNull(value, field) {
+  if (value === null || value === undefined) return null
+  if (typeof value === "number" && Number.isFinite(value)) return value
+  throw new AppServerProtocolError("Codex app-server returned an invalid number field.", {
+    field,
+    valueType: typeof value,
+  })
+}
+
 function isoTimestamp(value, field, warnings = null) {
   if (value === null || value === undefined) return null
   if (typeof value !== "number" || !Number.isFinite(value)) {
@@ -81,32 +119,33 @@ export function normalizeThreadSummary(raw = {}, {
   includeAdapterSpecific = false,
   includePreview = true,
 } = {}) {
+  raw = objectValue(raw, "thread")
   const summary = {
-    id: raw.id ?? null,
-    sessionId: raw.sessionId ?? null,
-    title: raw.name ?? null,
+    id: stringOrNull(raw.id, "thread.id"),
+    sessionId: stringOrNull(raw.sessionId, "thread.sessionId"),
+    title: stringOrNull(raw.name, "thread.name"),
     source: raw.source ?? null,
-    originator: raw.originator ?? null,
-    cwd: raw.cwd ?? null,
-    projectId: raw.projectId ?? null,
-    parentThreadId: raw.parentThreadId ?? null,
-    forkedFromId: raw.forkedFromId ?? null,
-    ephemeral: raw.ephemeral ?? null,
-    isPinned: raw.isPinned ?? null,
-    historyMode: raw.historyMode ?? null,
-    modelProvider: raw.modelProvider ?? null,
-    model: raw.model ?? null,
-    reasoningEffort: raw.reasoningEffort ?? null,
+    originator: stringOrNull(raw.originator, "thread.originator"),
+    cwd: stringOrNull(raw.cwd, "thread.cwd"),
+    projectId: stringOrNull(raw.projectId, "thread.projectId"),
+    parentThreadId: stringOrNull(raw.parentThreadId, "thread.parentThreadId"),
+    forkedFromId: stringOrNull(raw.forkedFromId, "thread.forkedFromId"),
+    ephemeral: booleanOrNull(raw.ephemeral, "thread.ephemeral"),
+    isPinned: booleanOrNull(raw.isPinned, "thread.isPinned"),
+    historyMode: stringOrNull(raw.historyMode, "thread.historyMode"),
+    modelProvider: stringOrNull(raw.modelProvider, "thread.modelProvider"),
+    model: stringOrNull(raw.model, "thread.model"),
+    reasoningEffort: stringOrNull(raw.reasoningEffort, "thread.reasoningEffort"),
     createdAt: isoTimestamp(raw.createdAt, "thread.createdAt"),
     updatedAt: isoTimestamp(raw.updatedAt, "thread.updatedAt"),
     recencyAt: isoTimestamp(raw.recencyAt, "thread.recencyAt"),
-    cliVersion: raw.cliVersion ?? null,
+    cliVersion: stringOrNull(raw.cliVersion, "thread.cliVersion"),
     gitInfo: raw.gitInfo ?? null,
     section: raw.section ?? null,
-    agentNickname: raw.agentNickname ?? null,
-    agentRole: raw.agentRole ?? null,
+    agentNickname: stringOrNull(raw.agentNickname, "thread.agentNickname"),
+    agentRole: stringOrNull(raw.agentRole, "thread.agentRole"),
   }
-  if (includePreview) summary.preview = raw.preview ?? null
+  if (includePreview) summary.preview = stringOrNull(raw.preview, "thread.preview")
 
   if (includeAdapterSpecific) {
     const adapterSpecific = remainingFields(raw, THREAD_FIELDS)
@@ -116,13 +155,14 @@ export function normalizeThreadSummary(raw = {}, {
 }
 
 function normalizeTurn(raw = {}, warnings) {
+  raw = objectValue(raw, "turn")
   return {
-    id: raw.id ?? null,
-    status: raw.status ?? null,
+    id: stringOrNull(raw.id, "turn.id"),
+    status: stringOrNull(raw.status, "turn.status"),
     error: raw.error ?? null,
     startedAt: isoTimestamp(raw.startedAt, `turns.${raw.id ?? "unknown"}.startedAt`, warnings),
     completedAt: isoTimestamp(raw.completedAt, `turns.${raw.id ?? "unknown"}.completedAt`, warnings),
-    durationMs: raw.durationMs ?? null,
+    durationMs: finiteNumberOrNull(raw.durationMs, "turn.durationMs"),
     itemsView: raw.itemsView ?? null,
     itemCount: Array.isArray(raw.items) ? raw.items.length : 0,
   }
@@ -139,13 +179,14 @@ function userMessageText(content) {
 
 function normalizeMessage(item, turnId, sequence) {
   const user = item.type === "userMessage"
+  const text = user ? userMessageText(item.content) : stringOrNull(item.text, "item.text")
   const message = {
-    id: item.id ?? null,
+    id: stringOrNull(item.id, "item.id"),
     turnId,
     role: user ? "user" : "assistant",
-    text: user ? userMessageText(item.content) : (item.text ?? null),
-    phase: user ? null : (item.phase ?? null),
-    content: user ? (item.content ?? null) : [{ type: "text", text: item.text ?? "" }],
+    text,
+    phase: user ? null : stringOrNull(item.phase, "item.phase"),
+    content: user ? item.content : [{ type: "text", text: text ?? "" }],
     createdAt: null,
     sequence,
   }
@@ -156,17 +197,24 @@ function normalizeMessage(item, turnId, sequence) {
 }
 
 function activitySummary(item) {
-  if (item.type === "commandExecution") return item.command ?? null
-  if (item.type === "mcpToolCall") return [item.server, item.tool].filter(Boolean).join("/") || null
-  if (item.type === "dynamicToolCall") return item.tool ?? null
-  if (item.type === "collabAgentToolCall") return item.tool ?? null
-  if (item.type === "webSearch") return item.query ?? item.action?.query ?? null
-  if (item.type === "imageView") return item.path ?? null
+  if (item.type === "commandExecution") return stringOrNull(item.command, "item.command")
+  if (item.type === "mcpToolCall") {
+    return [
+      stringOrNull(item.server, "item.server"),
+      stringOrNull(item.tool, "item.tool"),
+    ].filter(Boolean).join("/") || null
+  }
+  if (item.type === "dynamicToolCall") return stringOrNull(item.tool, "item.tool")
+  if (item.type === "collabAgentToolCall") return stringOrNull(item.tool, "item.tool")
+  if (item.type === "webSearch") {
+    return stringOrNull(item.query ?? item.action?.query, "item.query")
+  }
+  if (item.type === "imageView") return stringOrNull(item.path, "item.path")
   if (item.type === "fileChange") {
     const count = Array.isArray(item.changes) ? item.changes.length : 0
     return `${count} file change${count === 1 ? "" : "s"}`
   }
-  if (item.type === "plan") return item.text ?? null
+  if (item.type === "plan") return stringOrNull(item.text, "item.text")
   if (item.type === "reasoning") {
     return Array.isArray(item.summary) ? item.summary.join("\n") || null : null
   }
@@ -185,10 +233,10 @@ function normalizeActivity(item, turnId, sequence, warnings) {
 
   const { id, type, ...payload } = item
   const activity = {
-    id: id ?? null,
+    id: stringOrNull(id, "item.id"),
     turnId,
-    kind: type ?? "unknown",
-    status: item.status ?? null,
+    kind: stringOrNull(type, "item.type") ?? "unknown",
+    status: stringOrNull(item.status, "item.status"),
     summary: activitySummary(item),
     payload,
     createdAt: null,
@@ -245,6 +293,7 @@ export function normalizeThread(raw = {}, {
   toolVersion = VERSION,
   observedAt = new Date().toISOString(),
 } = {}) {
+  raw = objectValue(raw, "thread")
   const warnings = []
   const rawTurns = Array.isArray(raw.turns) ? raw.turns : []
   const selected = selectRawTurns(rawTurns, selection)
@@ -253,22 +302,31 @@ export function normalizeThread(raw = {}, {
   const turns = []
   const messages = []
   const activities = []
+  const seenTurnIds = new Set()
   let sequence = 0
 
   for (const rawTurn of selected.turns) {
-    const turnId = rawTurn?.id ?? null
-    turns.push(normalizeTurn(rawTurn, warnings))
+    const turn = normalizeTurn(rawTurn, warnings)
+    const turnId = turn.id
+    if (seenTurnIds.has(turnId)) {
+      throw new AppServerProtocolError("Codex app-server returned a duplicate turn ID.", {
+        turnId,
+      })
+    }
+    seenTurnIds.add(turnId)
+    turns.push(turn)
     for (const item of Array.isArray(rawTurn?.items) ? rawTurn.items : []) {
-      if (item?.type === "userMessage" || item?.type === "agentMessage") {
-        messages.push(normalizeMessage(item, turnId, sequence))
+      const normalizedItem = objectValue(item, "turn.items")
+      if (normalizedItem.type === "userMessage" || normalizedItem.type === "agentMessage") {
+        messages.push(normalizeMessage(normalizedItem, turnId, sequence))
       } else {
-        activities.push(normalizeActivity(item ?? {}, turnId, sequence, warnings))
+        activities.push(normalizeActivity(normalizedItem, turnId, sequence, warnings))
       }
       sequence += 1
     }
   }
 
-  const runtimeStatus = raw.status ?? { type: "unknown" }
+  const runtimeStatus = raw.status === undefined ? { type: "unknown" } : raw.status
   const latestReturnedTurn = selected.turns.at(-1) ?? null
   const returnedTurnInProgress = latestReturnedTurn?.status === "inProgress"
   if (runtimeStatus?.type === "active") {

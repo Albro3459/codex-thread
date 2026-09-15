@@ -65,6 +65,18 @@ function appServerVersion(initialize) {
   return null
 }
 
+function missingThreadProbeSucceeded(error) {
+  if (!(error instanceof AppServerProtocolError) || error.details?.serverCode === -32601) {
+    return false
+  }
+  const message = error.serverMessage?.toLowerCase() ?? ""
+  return message.includes("thread") && (
+    message.includes("not found")
+    || message.includes("does not exist")
+    || message.includes("no rollout")
+  )
+}
+
 export async function inspectInstallation(options = {}) {
   const warnings = []
   const runtimeVersion = process.versions.node
@@ -109,14 +121,12 @@ export async function inspectInstallation(options = {}) {
         if (!Array.isArray(listed?.data)) throw new Error("thread/list returned an invalid result")
         if (listed.data.length === 0) {
           try {
-            await session.readThread("00000000-0000-7000-8000-000000000000", {
+            const read = await session.readThread("00000000-0000-7000-8000-000000000000", {
               includeTurns: false,
             })
+            if (!read?.thread) throw new Error("thread/read returned an invalid result")
           } catch (error) {
-            if (!(error instanceof AppServerProtocolError)
-              || error.details?.serverCode === -32601) {
-              throw error
-            }
+            if (!missingThreadProbeSucceeded(error)) throw error
           }
           checks.methods = check(true, "ok", "Stable thread/list and thread/read methods work.", {
             threadList: true,
@@ -167,7 +177,9 @@ export async function inspectInstallation(options = {}) {
 }
 
 export function doctorExitCode(report) {
-  return report.healthy ? EXIT_CODES.SUCCESS : EXIT_CODES.CODEX_UNAVAILABLE
+  if (report.healthy) return EXIT_CODES.SUCCESS
+  if (!report.checks?.node?.ok) return EXIT_CODES.UNEXPECTED_FAILURE
+  return EXIT_CODES.CODEX_UNAVAILABLE
 }
 
 export function formatDoctorHuman(report) {

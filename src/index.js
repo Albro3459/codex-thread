@@ -19,6 +19,10 @@ import { VERSION } from "./version.js"
 
 const SERVER_PAGE_LIMIT = 100
 
+function isObject(value) {
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+}
+
 function assertListResponse(response) {
   if (!response || !Array.isArray(response.data)) {
     throw new AppServerProtocolError("Codex app-server returned an invalid thread list.")
@@ -26,6 +30,62 @@ function assertListResponse(response) {
   if (response.nextCursor !== null && response.nextCursor !== undefined
     && typeof response.nextCursor !== "string") {
     throw new AppServerProtocolError("Codex app-server returned an invalid list cursor.")
+  }
+  for (const [index, thread] of response.data.entries()) {
+    if (!isObject(thread)) {
+      throw new AppServerProtocolError("Codex app-server returned an invalid thread summary.", {
+        index,
+      })
+    }
+  }
+}
+
+function assertThreadResponse(thread, threadId) {
+  if (thread === null || thread === undefined) throw new ThreadNotFoundError(threadId)
+  if (!isObject(thread)) {
+    throw new AppServerProtocolError("Codex app-server returned an invalid thread.", {
+      threadId,
+    })
+  }
+  if (thread.id !== threadId) {
+    throw new AppServerProtocolError("Codex app-server returned the wrong thread.", {
+      requestedThreadId: threadId,
+      returnedThreadId: thread.id ?? null,
+    })
+  }
+  if (!Array.isArray(thread.turns)) {
+    throw new AppServerProtocolError("Codex app-server omitted turns from a full thread read.", {
+      threadId,
+    })
+  }
+  for (const [turnIndex, turn] of thread.turns.entries()) {
+    if (!isObject(turn)
+      || (turn.id !== null && turn.id !== undefined && typeof turn.id !== "string")
+      || !Array.isArray(turn.items)) {
+      throw new AppServerProtocolError("Codex app-server returned an invalid turn.", {
+        threadId,
+        turnIndex,
+      })
+    }
+    for (const [itemIndex, item] of turn.items.entries()) {
+      if (!isObject(item)) {
+        throw new AppServerProtocolError("Codex app-server returned an invalid turn item.", {
+          threadId,
+          turnId: turn.id,
+          itemIndex,
+        })
+      }
+      if (item.type === "agentMessage"
+        && item.text !== null
+        && item.text !== undefined
+        && typeof item.text !== "string") {
+        throw new AppServerProtocolError("Codex app-server returned an invalid assistant message.", {
+          threadId,
+          turnId: turn.id,
+          itemIndex,
+        })
+      }
+    }
   }
 }
 
@@ -125,18 +185,7 @@ export function createCodexThreadClient(options = {}) {
         if (protocolNeedsExperimentalPagination(error)) throw new UnsupportedHistoryError(threadId)
         throw error
       }
-      if (!response?.thread || response.thread.id !== threadId) {
-        if (!response?.thread) throw new ThreadNotFoundError(threadId)
-        throw new AppServerProtocolError("Codex app-server returned the wrong thread.", {
-          requestedThreadId: threadId,
-          returnedThreadId: response.thread.id ?? null,
-        })
-      }
-      if (!Array.isArray(response.thread.turns)) {
-        throw new AppServerProtocolError("Codex app-server omitted turns from a full thread read.", {
-          threadId,
-        })
-      }
+      assertThreadResponse(response?.thread, threadId)
       return normalizeThread(response.thread, {
         selection,
         toolVersion: VERSION,
