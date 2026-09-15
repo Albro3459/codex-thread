@@ -208,19 +208,22 @@ class AppServerSession {
   }
 
   async run(method, params) {
-    if (!READ_METHODS.has(method)) {
-      throw new AppServerProtocolError("Only stable read methods are available through this client.", {
-        method,
-      })
-    }
+    return this.runOperation(({ request }) => request(method, params))
+  }
 
+  async runOperation(operation) {
     let result
     let failure = null
     try {
       await this.start()
-      await this.request("initialize", createInitializeParams(this.options), this.startupTimeoutMs, "startup")
+      const initialize = await this.request(
+        "initialize",
+        createInitializeParams(this.options),
+        this.startupTimeoutMs,
+        "startup",
+      )
       this.write({ method: "initialized" })
-      result = await this.request(method, params, this.requestTimeoutMs, "request")
+      result = await operation(this.operationClient(), { initialize })
     } catch (error) {
       failure = error
     }
@@ -238,6 +241,27 @@ class AppServerSession {
     }
 
     return result
+  }
+
+  operationClient() {
+    const request = (method, params = {}) => {
+      if (!READ_METHODS.has(method)) {
+        throw new AppServerProtocolError("Only stable read methods are available through this client.", {
+          method,
+        })
+      }
+      return this.request(method, params, this.requestTimeoutMs, "request")
+    }
+
+    return Object.freeze({
+      request,
+      listThreads: (params = {}) => request("thread/list", withSourceKinds(params)),
+      readThread: (threadId, params = {}) => request("thread/read", {
+        ...params,
+        threadId,
+        includeTurns: params.includeTurns ?? true,
+      }),
+    })
   }
 
   async start() {
@@ -517,25 +541,35 @@ export async function requestAppServer(method, params = {}, options = {}) {
   return new AppServerSession(options).run(method, params)
 }
 
+function withSourceKinds(params) {
+  const { includeSubagents, ...wireParams } = params
+  if (wireParams.sourceKinds === undefined) {
+    wireParams.sourceKinds = includeSubagents
+      ? [...TOP_LEVEL_SOURCE_KINDS, ...SUBAGENT_SOURCE_KINDS]
+      : [...TOP_LEVEL_SOURCE_KINDS]
+  }
+  return wireParams
+}
+
 export function createAppServerClient(options = {}) {
   return Object.freeze({
+    withSession(operation) {
+      if (typeof operation !== "function") {
+        throw new TypeError("operation must be a function.")
+      }
+      return new AppServerSession(options).runOperation(operation)
+    },
     request(method, params = {}) {
       return requestAppServer(method, params, options)
     },
     listThreads(params = {}) {
-      const { includeSubagents, ...wireParams } = params
-      if (wireParams.sourceKinds === undefined) {
-        wireParams.sourceKinds = includeSubagents
-          ? [...TOP_LEVEL_SOURCE_KINDS, ...SUBAGENT_SOURCE_KINDS]
-          : [...TOP_LEVEL_SOURCE_KINDS]
-      }
-      return requestAppServer("thread/list", wireParams, options)
+      return requestAppServer("thread/list", withSourceKinds(params), options)
     },
     readThread(threadId, params = {}) {
       return requestAppServer("thread/read", {
         ...params,
         threadId,
-        includeTurns: true,
+        includeTurns: params.includeTurns ?? true,
       }, options)
     },
   })
