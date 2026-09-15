@@ -159,8 +159,8 @@ function helpText() {
 Read local Codex threads through the installed Codex CLI.
 
 Usage:
-  codex-thread list [--limit N] [--offset N] [--reverse] [--archived]
-  codex-thread find --title TEXT [--reverse] [--archived]
+  codex-thread list [--limit N] [--offset N] [--reverse] [--archived] [--include-subagents]
+  codex-thread find --title TEXT [--reverse] [--archived] [--include-subagents]
   codex-thread get THREAD [--last-turn | --turn ID | --turn-limit N --turn-offset N]
   codex-thread doctor
   codex-thread schema NAME
@@ -168,7 +168,6 @@ Usage:
 
 Shared options:
   --format human|json|jsonl
-  --include-subagents       Include Codex subagent sources in list and find
   -h, --help
   -v, --version
 
@@ -228,9 +227,11 @@ export async function run(parsed, {
       overwrite: parsed.overwrite,
       backup: parsed.backup,
     })
-    write(stdout, format === "json"
-      ? JSON.stringify(result, null, 2)
-      : `Installed ${result.skill} at ${result.destination}`)
+    const human = [
+      `Installed ${result.skill} at ${result.destination}`,
+      ...result.warnings.map((warning) => `Warning: ${warning.message} ${warning.details.path}`),
+    ].join("\n")
+    write(stdout, format === "json" ? JSON.stringify(result, null, 2) : human)
     return EXIT_CODES.SUCCESS
   }
 

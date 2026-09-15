@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process"
 
 import { createAppServerClient, resolveCodexExecutable } from "./app-server.js"
-import { EXIT_CODES } from "./errors.js"
+import { AppServerProtocolError, EXIT_CODES } from "./errors.js"
 import { VERSION } from "./version.js"
 
 export const DOCTOR_SCHEMA_VERSION = "codex-thread.doctor.v1"
@@ -108,15 +108,20 @@ export async function inspectInstallation(options = {}) {
         const listed = await session.listThreads({ limit: 1, sortKey: "updated_at" })
         if (!Array.isArray(listed?.data)) throw new Error("thread/list returned an invalid result")
         if (listed.data.length === 0) {
-          checks.methods = check(
-            true,
-            "partial",
-            "thread/list works. thread/read could not be checked because no thread exists.",
-            { threadList: true, threadRead: null },
-          )
-          warnings.push({
-            code: "THREAD_READ_NOT_CHECKED",
-            message: "No thread was available for a metadata-only thread/read check.",
+          try {
+            await session.readThread("00000000-0000-7000-8000-000000000000", {
+              includeTurns: false,
+            })
+          } catch (error) {
+            if (!(error instanceof AppServerProtocolError)
+              || error.details?.serverCode === -32601) {
+              throw error
+            }
+          }
+          checks.methods = check(true, "ok", "Stable thread/list and thread/read methods work.", {
+            threadList: true,
+            threadRead: true,
+            threadReadProbe: "missing-thread",
           })
           return
         }

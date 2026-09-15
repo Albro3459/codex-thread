@@ -61,6 +61,7 @@
         "preview": { "type": ["string", "null"] },
         "source": {},
         "originator": { "type": ["string", "null"] },
+        "cwd": { "type": ["string", "null"] },
         "projectId": { "type": ["string", "null"] },
         "parentThreadId": { "type": ["string", "null"] },
         "forkedFromId": { "type": ["string", "null"] },

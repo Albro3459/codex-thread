@@ -26,14 +26,15 @@ function record(recordType, data, { threadId = null, turnId = null } = {}) {
 
 export function jsonlRecordsForThread(envelope) {
   const threadId = envelope.thread.id
-  const records = [record("header", {
+  const header = {
     schemaVersion: envelope.schemaVersion,
     toolVersion: envelope.toolVersion,
     thread: envelope.thread,
     runtime: envelope.runtime,
     warnings: envelope.warnings,
-    selection: envelope.selection ?? null,
-  }, { threadId })]
+  }
+  if (envelope.selection) header.selection = envelope.selection
+  const records = [record("header", header, { threadId })]
 
   for (const turn of envelope.turns) {
     records.push(record("turn", turn, { threadId, turnId: turn.id }))
