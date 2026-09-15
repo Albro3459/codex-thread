@@ -81,7 +81,7 @@ export function normalizeThreadSummary(raw = {}, { includeAdapterSpecific = fals
   const summary = {
     id: raw.id ?? null,
     sessionId: raw.sessionId ?? null,
-    title: raw.name ?? null,
+    title: raw.name ?? raw.preview ?? null,
     preview: raw.preview ?? null,
     source: raw.source ?? null,
     originator: raw.originator ?? null,

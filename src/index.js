@@ -95,9 +95,8 @@ export function createCodexThreadClient(options = {}) {
       const collected = await appServer.withSession((session) => collectThreads(session, findOptions))
       const query = findOptions.title.toLowerCase()
       const matches = collected.threads.filter((thread) => (
-        [thread?.name, thread?.preview].some((title) => (
-          typeof title === "string" && title.toLowerCase().includes(query)
-        ))
+        typeof (thread?.name ?? thread?.preview) === "string"
+        && (thread.name ?? thread.preview).toLowerCase().includes(query)
       ))
       return normalizeThreadSearch(matches, { options: findOptions, toolVersion: VERSION })
     },
@@ -160,4 +159,24 @@ export {
   normalizePositiveCount,
   normalizeTurnSelection,
 } from "./query-options.js"
+export {
+  DOCTOR_SCHEMA_VERSION,
+  doctorExitCode,
+  formatDoctorHuman,
+  inspectInstallation,
+} from "./doctor.js"
+export {
+  BUNDLED_SCHEMAS,
+  formatBundledSchema,
+  readBundledSchema,
+  resolveSchemaPath,
+} from "./schema.js"
+export {
+  SKILL_FILES,
+  SKILL_NAME,
+  bundledSkillRoot,
+  installBundledSkill,
+  resolveSkillInstallTarget,
+  validateBundledSkill,
+} from "./skill-install.js"
 export { VERSION }
